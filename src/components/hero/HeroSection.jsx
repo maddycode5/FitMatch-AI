@@ -4,14 +4,14 @@ import GarmentHeroScene from '../3d/GarmentHeroScene';
 import FloatingProductCards from './FloatingProductCards';
 import { ArrowRight, RotateCw, SlidersHorizontal, ShieldCheck, Sparkles } from 'lucide-react';
 
-export default function HeroSection({ onOpenFitFinder }) {
+export default function HeroSection({ onOpenFitFinder, currentProfile }) {
   return (
     <section className="relative w-full min-h-screen pt-24 pb-12 flex flex-col justify-between overflow-hidden bg-gradient-to-b from-[#030611] via-[#020409] to-[#010206]">
       {/* Ambient Cyber Spotlight */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[900px] bg-cyan-500/[0.05] rounded-full blur-[180px] pointer-events-none" />
 
       {/* Far Outer Floating Cards (Cleanly docked at the outer margins) */}
-      <FloatingProductCards />
+      <FloatingProductCards customerProfile={currentProfile} onOpenFitFinder={onOpenFitFinder} />
 
       {/* Hero Headline Overlay */}
       <div className="relative z-10 container mx-auto px-6 text-center max-w-4xl mt-2">

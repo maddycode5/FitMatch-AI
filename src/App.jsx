@@ -9,6 +9,7 @@ import { INITIAL_USER_PROFILE } from './engine/types';
 
 export default function App() {
   const [isFitFinderOpen, setIsFitFinderOpen] = useState(false);
+  const [selectedProductIndex, setSelectedProductIndex] = useState(0);
 
   // Load from localStorage or fallback to standard initial profile
   const [customerProfile, setCustomerProfile] = useState(() => {
@@ -65,19 +66,28 @@ export default function App() {
 
       <main>
         {/* Editorial Luxury 3D Hero */}
-        <HeroSection onOpenFitFinder={() => setIsFitFinderOpen(true)} />
+        <HeroSection
+          onOpenFitFinder={() => setIsFitFinderOpen(true)}
+          currentProfile={customerProfile}
+        />
 
         {/* 3D Real-Time Atelier & Sizing Recommendation Engine */}
         <ProductStudio3D
           customerProfile={customerProfile}
           onOpenFitFinder={() => setIsFitFinderOpen(true)}
+          selectedProductIndex={selectedProductIndex}
+          onSelectProduct={setSelectedProductIndex}
         />
 
         {/* Morphological AI Diagnostic Details */}
-        <FitDemoSection />
+        <FitDemoSection
+          customerProfile={customerProfile}
+          selectedProductIndex={selectedProductIndex}
+          onSelectProduct={setSelectedProductIndex}
+        />
 
         {/* Curated Luxury Archive */}
-        <LuxuryGrid />
+        <LuxuryGrid onSelectProduct={setSelectedProductIndex} />
       </main>
 
       {/* Fit Finder Multi-Method Onboarding Modal */}
