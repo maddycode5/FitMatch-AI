@@ -243,20 +243,6 @@ flowchart TD
 
 ---
 
-## ✦ Git Commit Architecture
-
-The repository's evolution is cleanly divided into structured milestones:
-
-* `d778eaa`: `chore: initialize FitMatch AI architecture, toolchain, and deterministic fit engine`
-* `33c0fd3`: `feat(onboarding): implement multi-modal body measurement ingestion flows`
-* `2915209`: `feat(ui): build luxury fashion-tech hero, telemetry HUD, and showcase grid`
-* `1582de8`: `feat(3d-studio): deliver full-body biometric hologram model and dynamic wardrobe draping engine`
-* `1e327f1`: `docs: add comprehensive architecture, features, and workflows README`
-* `6533c77`: `feat(3d-garments): implement photorealistic Virtual Archive tailored apparel, PBR procedural weaves, and dynamic morphological draping`
-* `dd3b1f4`: `feat: balance proportional 3D workspace, live fabric physics simulation, and interactive biometric HUD`
-
----
-
 ## ✦ License & Attribution
 
 Designed and engineered for **FitMatch AI**. Released under the [MIT License](LICENSE).
