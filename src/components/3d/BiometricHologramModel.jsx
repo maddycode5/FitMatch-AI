@@ -1,20 +1,31 @@
 import React, { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
+import {
+  createSuitBlazerTexture,
+  createDrapeShirtTexture,
+  createPantalonTexture,
+  createTrenchTexture
+} from './RealGarmentTextures';
 
 /**
- * Biometric Hologram & Dynamic Wardrobe Try-On Engine
+ * Biometric Hologram & Real-Life Virtual Archive Try-On Engine
  * 
  * 1. Accurately renders the customer's full-body biometric avatar inside the laser scanner pod.
- * 2. When wardrobe try-on is active, dynamically generates and drapes the exact clothing piece
- *    (T-Shirt, Silk Shirt, Structured Blazer, Minimalist Trench, or Selvedge Jeans) conforming
- *    to the user's morphology and selected size.
- * 3. Changes textile fabric color and weave luster in real time based on user-selected swatch.
- * 4. Shows precision fit caliper bands and tension heatmaps across the worn garment.
+ * 2. Directly fits the real-life garments from The Virtual Archive onto the 3D model:
+ *    - Monochrome Cashmere 3-Piece Suit & Blazer (Check wool, vest, striped tie, pocket square, sleeves, trousers)
+ *    - Sculptural Asymmetric Drape Shirt (Crisp Egyptian white cotton, 3D collar, navy polka-dot silk tie, cuffs, trousers)
+ *    - Pleated Minimalist Pantalon (High-waisted tailored pinstripe wide-leg trousers with front pleats)
+ *    - The Sculptural Minimalist Trench (Double-breasted twill overcoat with belt, buckle, lapels, sleeves)
+ * 3. Garments conform dynamically to the user's morphology (chest, waist, shoulders, height),
+ *    active size (S/M/L/XL), and active fit preference (Slim/Regular/Oversized).
+ * 4. Zero crude plastic digital cones; displays true tailored apparel with real fabric textures and 3D details.
  */
 export default function BiometricHologramModel({
   profile,
   product,
+  selectedSize,
+  fitPreference = 'regular',
   colorway,
   tensionMap = {},
   wearGarment = true,
@@ -42,6 +53,32 @@ export default function BiometricHologramModel({
   const hipScale = Math.max(0.8, Math.min(1.3, (m.hip_cm || baseHip) / baseHip));
   const shoulderScale = Math.max(0.85, Math.min(1.25, (m.shoulder_cm || baseShoulder) / baseShoulder));
 
+  // Dynamic Garment Calibration based on selected size & active fit preference
+  const activeSizeObj = useMemo(() => {
+    if (!product?.size_chart) return null;
+    const found = product.size_chart.find(s => s.size === selectedSize);
+    return found || product.size_chart[0];
+  }, [product, selectedSize]);
+
+  const baseGarmentChest = product?.size_chart?.[1]?.garment_chest_cm || 108;
+  const currentGarmentChest = activeSizeObj?.garment_chest_cm || (activeSizeObj?.garment_waist_cm ? activeSizeObj.garment_waist_cm * 1.2 : baseGarmentChest);
+  const sizeRatio = Math.max(0.88, Math.min(1.22, currentGarmentChest / baseGarmentChest));
+
+  // Fit Preference Modifiers
+  // 'slim': tighter contour (-6% chest, -3% shoulders, tailored waist)
+  // 'regular': balanced tailored ease
+  // 'oversized': expanded architectural silhouette (+14% chest, +8% shoulders, +4% length)
+  const prefCircumferenceMod = fitPreference === 'slim' ? 0.94 : fitPreference === 'oversized' ? 1.14 : 1.0;
+  const prefShoulderMod = fitPreference === 'slim' ? 0.97 : fitPreference === 'oversized' ? 1.08 : 1.0;
+  const prefLengthMod = fitPreference === 'oversized' ? 1.04 : fitPreference === 'slim' ? 0.98 : 1.0;
+
+  // Composite Garment Scaling (Body Morphology * Garment Size * Fit Preference)
+  const gChestScale = chestScale * (0.88 * sizeRatio * prefCircumferenceMod);
+  const gShoulderScale = shoulderScale * (1.05 * Math.sqrt(sizeRatio) * prefShoulderMod);
+  const gWaistScale = waistScale * (0.90 * sizeRatio * prefCircumferenceMod);
+  const gHipScale = hipScale * (1.04 * sizeRatio * prefCircumferenceMod);
+  const gHeightScale = heightScale * prefLengthMod;
+
   // Neon Holographic Colors
   const neonCyan = "#00f0ff";
   const neonElectric = "#38bdf8";
@@ -51,7 +88,7 @@ export default function BiometricHologramModel({
     if (tension === undefined || tension === null) return '#10b981'; // optimal ease
     if (tension < -0.3) return '#f43f5e'; // strained / tight
     if (tension < -0.1) return '#fbbf24'; // snug
-    if (tension > 0.4) return '#38bdf8'; // loose
+    if (tension > 0.4) return '#38bdf8'; // loose / relaxed
     return '#10b981';
   };
 
@@ -59,11 +96,13 @@ export default function BiometricHologramModel({
   const waistTension = getTensionColor(tensionMap.waist);
   const hipTension = getTensionColor(tensionMap.hip);
 
+  const prodId = product?.id || 'PROD_BLAZER_01';
+  const category = product?.category || 'jacket';
+
   // Active Fabric Color from Wardrobe Swatch
-  const fabricColor = colorway?.hex || (product?.colorways?.[0]?.hex) || '#111113';
-  const fabricRoughness = colorway?.roughness ?? 0.35;
-  const fabricMetalness = colorway?.metalness ?? 0.45;
-  const fabricClearcoat = colorway?.clearcoat ?? 0.65;
+  const fabricColor = colorway?.hex || (product?.colorways?.[0]?.hex) || '#222428';
+  const fabricRoughness = colorway?.roughness ?? 0.70;
+  const fabricMetalness = colorway?.metalness ?? 0.35;
 
   // Real-time animation loop
   useFrame((state, delta) => {
@@ -91,7 +130,7 @@ export default function BiometricHologramModel({
     }
   });
 
-  // Human body morphology splines
+  // Human body morphology geometry splines
   const { torsoGeometry, headGeometry, legGeometry, armGeometry } = useMemo(() => {
     const torsoPoints = [
       new THREE.Vector2(0.12, 1.22),
@@ -146,73 +185,23 @@ export default function BiometricHologramModel({
     return { torsoGeometry: torso, headGeometry: head, legGeometry: leg, armGeometry: arm };
   }, []);
 
-  // Dynamic Garment Geometries for Each Wardrobe Category
-  const { tshirtBodyGeo, shirtBodyGeo, blazerBodyGeo, trenchBodyGeo, lapelGeo } = useMemo(() => {
-    // 1. Crewneck T-Shirt Body
-    const tshirtPoints = [
-      new THREE.Vector2(0.18, 1.10),
-      new THREE.Vector2(0.36, 1.04),
-      new THREE.Vector2(0.50, 0.96),
-      new THREE.Vector2(0.48, 0.78),
-      new THREE.Vector2(0.46, 0.52),
-      new THREE.Vector2(0.42, 0.26),
-      new THREE.Vector2(0.43, 0.02),
-      new THREE.Vector2(0.45, -0.10)
-    ];
-    const tshirt = new THREE.LatheGeometry(new THREE.SplineCurve(tshirtPoints).getPoints(36), 40);
+  // Generate Realistic Photorealistic Textures for the Active Garment
+  const garmentTexture = useMemo(() => {
+    if (prodId === 'PROD_BLAZER_01') {
+      return createSuitBlazerTexture(fabricColor);
+    } else if (category === 'shirt' || prodId === 'PROD_SHIRT_02') {
+      return createDrapeShirtTexture(fabricColor);
+    } else if (category === 'jeans' || prodId === 'PROD_PANTS_03') {
+      return createPantalonTexture(fabricColor);
+    } else {
+      return createTrenchTexture(fabricColor);
+    }
+  }, [prodId, category, fabricColor]);
 
-    // 2. Button-Down Silk Shirt Body
-    const shirtPoints = [
-      new THREE.Vector2(0.16, 1.14),
-      new THREE.Vector2(0.35, 1.06),
-      new THREE.Vector2(0.50, 0.98),
-      new THREE.Vector2(0.47, 0.76),
-      new THREE.Vector2(0.45, 0.50),
-      new THREE.Vector2(0.40, 0.24),
-      new THREE.Vector2(0.42, -0.02),
-      new THREE.Vector2(0.45, -0.22)
-    ];
-    const shirt = new THREE.LatheGeometry(new THREE.SplineCurve(shirtPoints).getPoints(36), 40);
-
-    // 3. Tailored Blazer Body
-    const blazerPoints = [
-      new THREE.Vector2(0.17, 1.16),
-      new THREE.Vector2(0.36, 1.08),
-      new THREE.Vector2(0.52, 0.98),
-      new THREE.Vector2(0.50, 0.74),
-      new THREE.Vector2(0.48, 0.48),
-      new THREE.Vector2(0.43, 0.22),
-      new THREE.Vector2(0.46, -0.04),
-      new THREE.Vector2(0.50, -0.28)
-    ];
-    const blazer = new THREE.LatheGeometry(new THREE.SplineCurve(blazerPoints).getPoints(40), 44);
-
-    // 4. Minimalist Trench Overcoat Body
-    const trenchPoints = [
-      new THREE.Vector2(0.19, 1.18),
-      new THREE.Vector2(0.38, 1.10),
-      new THREE.Vector2(0.54, 0.98),
-      new THREE.Vector2(0.52, 0.72),
-      new THREE.Vector2(0.50, 0.46),
-      new THREE.Vector2(0.45, 0.20),
-      new THREE.Vector2(0.48, -0.08),
-      new THREE.Vector2(0.56, -0.38),
-      new THREE.Vector2(0.64, -0.68)
-    ];
-    const trench = new THREE.LatheGeometry(new THREE.SplineCurve(trenchPoints).getPoints(44), 48);
-
-    // Tailored Lapel Shape
-    const lapelShape = new THREE.Shape();
-    lapelShape.moveTo(0, 0);
-    lapelShape.lineTo(0.18, 0.14);
-    lapelShape.lineTo(0.26, 0.38);
-    lapelShape.lineTo(0.11, 0.50);
-    lapelShape.lineTo(0.01, 0.46);
-    lapelShape.closePath();
-    const lapel = new THREE.ExtrudeGeometry(lapelShape, { depth: 0.025, bevelEnabled: true, bevelSize: 0.008 });
-
-    return { tshirtBodyGeo: tshirt, shirtBodyGeo: shirt, blazerBodyGeo: blazer, trenchBodyGeo: trench, lapelGeo: lapel };
-  }, []);
+  // Secondary Trouser Texture for two-piece ensembles
+  const suitTrouserTexture = useMemo(() => {
+    return createPantalonTexture(prodId === 'PROD_BLAZER_01' ? fabricColor : '#18191d');
+  }, [prodId, fabricColor]);
 
   // Cylindrical laser pod beams
   const laserBeams = useMemo(() => {
@@ -229,8 +218,7 @@ export default function BiometricHologramModel({
     return beams;
   }, []);
 
-  const category = product?.category || 'jacket';
-  const prodId = product?.id || 'PROD_TRENCH_01';
+  const isTrousers = category === 'jeans' || prodId === 'PROD_PANTS_03';
 
   return (
     <group ref={groupRef} position={[0, -0.15, 0]}>
@@ -316,84 +304,51 @@ export default function BiometricHologramModel({
             transmission={0.78}
             thickness={0.6}
             transparent
-            opacity={0.55}
+            opacity={0.75}
           />
         </mesh>
 
-        {/* Torso & Ribcage */}
-        <group scale={[shoulderScale * 1.02, 1, chestScale * 0.82]}>
-          <mesh geometry={torsoGeometry} castShadow>
-            <meshBasicMaterial
-              color={showHeatmap ? chestTension : neonCyan}
-              wireframe
-              opacity={wearGarment && category !== 'jeans' ? 0.25 : 0.65}
-              transparent
-            />
-          </mesh>
-          <mesh geometry={torsoGeometry}>
-            <meshPhysicalMaterial
-              color={showHeatmap ? chestTension : "#0284c7"}
-              emissive={showHeatmap ? chestTension : "#0369a1"}
-              emissiveIntensity={showHeatmap ? 0.85 : 0.55}
-              roughness={0.15}
-              transmission={0.78}
-              thickness={0.8}
-              transparent
-              opacity={wearGarment && category !== 'jeans' ? 0.20 : 0.5}
-            />
-          </mesh>
-        </group>
+        {/* Anatomical Torso */}
+        <mesh
+          geometry={torsoGeometry}
+          scale={[shoulderScale, 1, chestScale]}
+          position={[0, 0, 0]}
+          castShadow
+        >
+          <meshBasicMaterial
+            color={showHeatmap ? chestTension : neonCyan}
+            wireframe
+            opacity={wearGarment ? 0.18 : 0.70}
+            transparent
+          />
+        </mesh>
+        <mesh
+          geometry={torsoGeometry}
+          scale={[shoulderScale, 1, chestScale]}
+          position={[0, 0, 0]}
+        >
+          <meshPhysicalMaterial
+            color={showHeatmap ? chestTension : "#0284c7"}
+            emissive={showHeatmap ? chestTension : "#0369a1"}
+            emissiveIntensity={0.45}
+            roughness={0.2}
+            transmission={0.7}
+            transparent
+            opacity={wearGarment ? 0.22 : 0.65}
+          />
+        </mesh>
 
-        {/* Luminous Heart Core */}
-        <group position={[0, 0.72, 0.20]} ref={heartGlowRef}>
-          <mesh>
-            <sphereGeometry args={[0.07, 24, 24]} />
-            <meshBasicMaterial color="#ffffff" toneMapped={false} />
-          </mesh>
-          <mesh>
-            <sphereGeometry args={[0.16, 24, 24]} />
-            <meshBasicMaterial
-              color={showHeatmap ? chestTension : neonCyan}
-              opacity={0.5}
-              transparent
-              toneMapped={false}
-            />
-          </mesh>
-        </group>
-
-        {/* Luminous Solar Plexus Core */}
-        <group position={[0, 0.32, 0.17]} ref={navelGlowRef}>
-          <mesh>
-            <sphereGeometry args={[0.06, 24, 24]} />
-            <meshBasicMaterial color="#ffffff" toneMapped={false} />
-          </mesh>
-          <mesh>
-            <sphereGeometry args={[0.14, 24, 24]} />
-            <meshBasicMaterial
-              color={showHeatmap ? waistTension : neonCyan}
-              opacity={0.5}
-              transparent
-              toneMapped={false}
-            />
-          </mesh>
-        </group>
-
-        {/* Constellation Landmark Nodes */}
+        {/* Biometric Laser Nodes */}
         {[
-          [-0.42 * shoulderScale, 1.02, 0.05],
-          [0.42 * shoulderScale, 1.02, 0.05],
-          [-0.48 * shoulderScale, 0.60, 0.02],
-          [0.48 * shoulderScale, 0.60, 0.02],
-          [-0.50 * shoulderScale, 0.22, 0.02],
-          [0.50 * shoulderScale, 0.22, 0.02],
-          [-0.26 * waistScale, 0.28, 0.12],
-          [0.26 * waistScale, 0.28, 0.12],
-          [-0.34 * hipScale, -0.15, 0.10],
-          [0.34 * hipScale, -0.15, 0.10],
-          [-0.21 * hipScale, -0.62, 0.08],
-          [0.21 * hipScale, -0.62, 0.08],
-          [-0.18 * hipScale, -1.18, 0.05],
-          [0.18 * hipScale, -1.18, 0.05]
+          [0, 1.15, 0.26],
+          [-0.38 * shoulderScale, 1.05, 0.12],
+          [0.38 * shoulderScale, 1.05, 0.12],
+          [0, 0.70, 0.28],
+          [0, 0.28, 0.22],
+          [-0.24 * hipScale, -0.22, 0.14],
+          [0.24 * hipScale, -0.22, 0.14],
+          [-0.18 * hipScale, -0.92, 0.10],
+          [0.18 * hipScale, -0.92, 0.10]
         ].map((pos, idx) => (
           <group key={idx} position={pos}>
             <mesh>
@@ -407,31 +362,33 @@ export default function BiometricHologramModel({
           </group>
         ))}
 
-        {/* Arms & Hands */}
+        {/* Avatar Left Arm */}
         <group position={[-0.44 * shoulderScale, 0.98, 0]} rotation={[0, 0, 0.14]}>
           <mesh geometry={armGeometry}>
-            <meshBasicMaterial color={neonCyan} wireframe opacity={0.6} transparent />
+            <meshBasicMaterial color={neonCyan} wireframe opacity={wearGarment ? 0.2 : 0.6} transparent />
           </mesh>
           <mesh geometry={armGeometry}>
-            <meshPhysicalMaterial color="#0ea5e9" transmission={0.7} roughness={0.2} transparent opacity={0.4} />
-          </mesh>
-        </group>
-        <group position={[0.44 * shoulderScale, 0.98, 0]} rotation={[0, 0, -0.14]}>
-          <mesh geometry={armGeometry}>
-            <meshBasicMaterial color={neonCyan} wireframe opacity={0.6} transparent />
-          </mesh>
-          <mesh geometry={armGeometry}>
-            <meshPhysicalMaterial color="#0ea5e9" transmission={0.7} roughness={0.2} transparent opacity={0.4} />
+            <meshPhysicalMaterial color="#0ea5e9" transmission={0.7} roughness={0.2} transparent opacity={wearGarment ? 0.15 : 0.4} />
           </mesh>
         </group>
 
-        {/* Legs & Feet */}
+        {/* Avatar Right Arm */}
+        <group position={[0.44 * shoulderScale, 0.98, 0]} rotation={[0, 0, -0.14]}>
+          <mesh geometry={armGeometry}>
+            <meshBasicMaterial color={neonCyan} wireframe opacity={wearGarment ? 0.2 : 0.6} transparent />
+          </mesh>
+          <mesh geometry={armGeometry}>
+            <meshPhysicalMaterial color="#0ea5e9" transmission={0.7} roughness={0.2} transparent opacity={wearGarment ? 0.15 : 0.4} />
+          </mesh>
+        </group>
+
+        {/* Avatar Left Leg */}
         <group position={[-0.21 * hipScale, -0.22, 0]}>
           <mesh geometry={legGeometry}>
             <meshBasicMaterial
               color={showHeatmap ? hipTension : neonCyan}
               wireframe
-              opacity={wearGarment && category === 'jeans' ? 0.25 : 0.65}
+              opacity={wearGarment ? 0.18 : 0.65}
               transparent
             />
           </mesh>
@@ -441,7 +398,7 @@ export default function BiometricHologramModel({
               transmission={0.72}
               roughness={0.2}
               transparent
-              opacity={wearGarment && category === 'jeans' ? 0.25 : 0.45}
+              opacity={wearGarment ? 0.15 : 0.45}
             />
           </mesh>
           <mesh position={[0, -1.05, 0.08]}>
@@ -450,12 +407,13 @@ export default function BiometricHologramModel({
           </mesh>
         </group>
 
+        {/* Avatar Right Leg */}
         <group position={[0.21 * hipScale, -0.22, 0]}>
           <mesh geometry={legGeometry}>
             <meshBasicMaterial
               color={showHeatmap ? hipTension : neonCyan}
               wireframe
-              opacity={wearGarment && category === 'jeans' ? 0.25 : 0.65}
+              opacity={wearGarment ? 0.18 : 0.65}
               transparent
             />
           </mesh>
@@ -465,7 +423,7 @@ export default function BiometricHologramModel({
               transmission={0.72}
               roughness={0.2}
               transparent
-              opacity={wearGarment && category === 'jeans' ? 0.25 : 0.45}
+              opacity={wearGarment ? 0.15 : 0.45}
             />
           </mesh>
           <mesh position={[0, -1.05, 0.08]}>
@@ -474,15 +432,11 @@ export default function BiometricHologramModel({
           </mesh>
         </group>
 
-        {/* Interactive Touch Target Reticle */}
+        {/* Interactive Reticle */}
         <group ref={reticleRef} position={[-0.52 * shoulderScale, 1.05, 0.25]}>
           <mesh>
-            <ringGeometry args={[0.08, 0.095, 32]} />
-            <meshBasicMaterial color={neonCyan} side={THREE.DoubleSide} toneMapped={false} />
-          </mesh>
-          <mesh>
-            <ringGeometry args={[0.13, 0.145, 32]} />
-            <meshBasicMaterial color={neonCyan} opacity={0.6} transparent side={THREE.DoubleSide} toneMapped={false} />
+            <ringGeometry args={[0.07, 0.085, 32]} />
+            <meshBasicMaterial color={neonCyan} toneMapped={false} />
           </mesh>
           <mesh>
             <circleGeometry args={[0.04, 24]} />
@@ -491,193 +445,382 @@ export default function BiometricHologramModel({
         </group>
 
         {/* ─────────────────────────────────────────────────────────────
-            3. DYNAMIC WARDROBE TRY-ON (CONFORMS TO REAL-TIME MORPHOLOGY)
+            3. REAL-LIFE VIRTUAL ARCHIVE GARMENT TRY-ON (DYNAMIC MORPHOLOGY)
            ───────────────────────────────────────────────────────────── */}
         {wearGarment && (
-          <group position={[0, 0.10, 0]}>
+          <group position={[0, 0, 0]}>
             
-            {/* OPTION A: T-SHIRT */}
-            {category === 'tshirt' && (
-              <group scale={[shoulderScale * 1.04, heightScale * 0.98, chestScale * 0.86]}>
-                {/* T-Shirt Torso */}
-                <mesh geometry={tshirtBodyGeo} castShadow receiveShadow>
-                  <meshPhysicalMaterial
-                    color={showHeatmap ? chestTension : fabricColor}
-                    roughness={showHeatmap ? 0.3 : 0.85}
-                    metalness={showHeatmap ? 0.2 : 0.08}
-                    clearcoat={0.1}
-                    side={THREE.DoubleSide}
-                  />
-                </mesh>
-                {/* Crewneck Ribbed Collar */}
-                <mesh position={[0, 1.10, 0]} rotation={[Math.PI / 2, 0, 0]}>
-                  <torusGeometry args={[0.18, 0.022, 16, 32]} />
-                  <meshStandardMaterial color={showHeatmap ? chestTension : fabricColor} roughness={0.9} />
-                </mesh>
-                {/* Short Sleeves */}
-                <mesh position={[-0.44, 0.86, 0]} rotation={[0, 0, 0.42]}>
-                  <cylinderGeometry args={[0.11, 0.10, 0.28, 24, 1, true]} />
-                  <meshStandardMaterial color={showHeatmap ? chestTension : fabricColor} roughness={0.85} side={THREE.DoubleSide} />
-                </mesh>
-                <mesh position={[0.44, 0.86, 0]} rotation={[0, 0, -0.42]}>
-                  <cylinderGeometry args={[0.11, 0.10, 0.28, 24, 1, true]} />
-                  <meshStandardMaterial color={showHeatmap ? chestTension : fabricColor} roughness={0.85} side={THREE.DoubleSide} />
-                </mesh>
+            {/* ═════════════════════════════════════════════════════════════
+                GARMENT 1: THE MONOCHROME CASHMERE BLAZER & 3-PIECE SUIT
+                (Check Wool, Peak Lapels, Waistcoat, Tie, Pocket Square, Sleeves & Pants)
+               ═════════════════════════════════════════════════════════════ */}
+            {prodId === 'PROD_BLAZER_01' && (
+              <group>
+                {/* Tailored Jacket Torso - rotation=[0, Math.PI, 0] puts the front details directly facing camera */}
+                <group scale={[gShoulderScale, gHeightScale * 0.98, gChestScale]}>
+                  <mesh position={[0, 0.52, 0.01]} rotation={[0, Math.PI, 0]} castShadow receiveShadow>
+                    <cylinderGeometry args={[0.51, 0.46, 0.98, 48, 1, false]} />
+                    <meshStandardMaterial
+                      map={garmentTexture}
+                      roughness={showHeatmap ? 0.3 : fabricRoughness}
+                      metalness={showHeatmap ? 0.2 : fabricMetalness}
+                      color={showHeatmap ? chestTension : '#ffffff'}
+                      side={THREE.DoubleSide}
+                    />
+                  </mesh>
+
+                  {/* 3D Peaked Left Lapel */}
+                  <mesh position={[-0.14, 0.68, 0.24]} rotation={[0.05, -0.22, -0.26]}>
+                    <boxGeometry args={[0.11, 0.42, 0.02]} />
+                    <meshStandardMaterial
+                      map={garmentTexture}
+                      color={showHeatmap ? chestTension : '#ffffff'}
+                      roughness={fabricRoughness}
+                    />
+                  </mesh>
+
+                  {/* 3D Peaked Right Lapel */}
+                  <mesh position={[0.14, 0.68, 0.24]} rotation={[0.05, 0.22, 0.26]}>
+                    <boxGeometry args={[0.11, 0.42, 0.02]} />
+                    <meshStandardMaterial
+                      map={garmentTexture}
+                      color={showHeatmap ? chestTension : '#ffffff'}
+                      roughness={fabricRoughness}
+                    />
+                  </mesh>
+
+                  {/* 3D Folded Crisp White Linen Pocket Square */}
+                  <mesh position={[-0.23, 0.76, 0.23]} rotation={[0, 0, -0.08]}>
+                    <coneGeometry args={[0.045, 0.06, 3]} />
+                    <meshStandardMaterial color="#ffffff" roughness={0.2} />
+                  </mesh>
+
+                  {/* 3D Silk Necktie Knot */}
+                  <mesh position={[0, 0.88, 0.23]} rotation={[Math.PI, 0, 0]}>
+                    <coneGeometry args={[0.045, 0.075, 4]} />
+                    <meshStandardMaterial color="#1e2129" roughness={0.3} metalness={0.4} />
+                  </mesh>
+
+                  {/* 3D Silk Striped Tie Blade */}
+                  <mesh position={[0, 0.58, 0.235]}>
+                    <boxGeometry args={[0.065, 0.50, 0.015]} />
+                    <meshStandardMaterial color="#1e2129" roughness={0.3} metalness={0.4} />
+                  </mesh>
+                </group>
+
+                {/* Left Tailored Suit Sleeve (Follows arm joint rotation) */}
+                <group position={[-0.44 * shoulderScale, 0.98, 0]} rotation={[0, 0, 0.14]}>
+                  <mesh position={[0, -0.42 * gHeightScale, 0]}>
+                    <cylinderGeometry args={[0.115 * gShoulderScale, 0.095 * gShoulderScale, 0.82 * gHeightScale, 28]} />
+                    <meshStandardMaterial
+                      map={garmentTexture}
+                      roughness={fabricRoughness}
+                      metalness={fabricMetalness}
+                      color={showHeatmap ? chestTension : '#ffffff'}
+                    />
+                  </mesh>
+                  {/* Crisp White Shirt Cuff peeking at wrist */}
+                  <mesh position={[0, -0.84 * gHeightScale, 0]}>
+                    <cylinderGeometry args={[0.082 * gShoulderScale, 0.084 * gShoulderScale, 0.05, 24]} />
+                    <meshStandardMaterial color="#ffffff" roughness={0.3} />
+                  </mesh>
+                </group>
+
+                {/* Right Tailored Suit Sleeve */}
+                <group position={[0.44 * shoulderScale, 0.98, 0]} rotation={[0, 0, -0.14]}>
+                  <mesh position={[0, -0.42 * gHeightScale, 0]}>
+                    <cylinderGeometry args={[0.115 * gShoulderScale, 0.095 * gShoulderScale, 0.82 * gHeightScale, 28]} />
+                    <meshStandardMaterial
+                      map={garmentTexture}
+                      roughness={fabricRoughness}
+                      metalness={fabricMetalness}
+                      color={showHeatmap ? chestTension : '#ffffff'}
+                    />
+                  </mesh>
+                  {/* Crisp White Shirt Cuff peeking at wrist */}
+                  <mesh position={[0, -0.84 * gHeightScale, 0]}>
+                    <cylinderGeometry args={[0.082 * gShoulderScale, 0.084 * gShoulderScale, 0.05, 24]} />
+                    <meshStandardMaterial color="#ffffff" roughness={0.3} />
+                  </mesh>
+                </group>
+
+                {/* Matching Tailored Suit Trousers on Legs */}
+                <group scale={[gHipScale, gHeightScale, gHipScale]} position={[0, -0.18, 0]}>
+                  {/* Waistband */}
+                  <mesh position={[0, 0.18, 0]} rotation={[0, Math.PI, 0]}>
+                    <cylinderGeometry args={[0.44, 0.42, 0.18, 36]} />
+                    <meshStandardMaterial map={suitTrouserTexture} roughness={fabricRoughness} />
+                  </mesh>
+                  {/* Left Trouser Leg */}
+                  <mesh position={[-0.21, -0.48, 0]}>
+                    <cylinderGeometry args={[0.16, 0.12, 1.05, 32]} />
+                    <meshStandardMaterial map={suitTrouserTexture} roughness={fabricRoughness} />
+                  </mesh>
+                  {/* Right Trouser Leg */}
+                  <mesh position={[0.21, -0.48, 0]}>
+                    <cylinderGeometry args={[0.16, 0.12, 1.05, 32]} />
+                    <meshStandardMaterial map={suitTrouserTexture} roughness={fabricRoughness} />
+                  </mesh>
+                </group>
               </group>
             )}
 
-            {/* OPTION B: SILK SARTORIAL DRESS SHIRT */}
-            {category === 'shirt' && (
-              <group scale={[shoulderScale * 1.04, heightScale * 0.99, chestScale * 0.86]}>
-                {/* Shirt Body */}
-                <mesh geometry={shirtBodyGeo} castShadow receiveShadow>
-                  <meshPhysicalMaterial
-                    color={showHeatmap ? chestTension : fabricColor}
-                    roughness={showHeatmap ? 0.25 : 0.22}
-                    metalness={showHeatmap ? 0.3 : 0.45}
-                    clearcoat={0.85}
-                    side={THREE.DoubleSide}
-                  />
-                </mesh>
-                {/* Collar Rim */}
-                <mesh position={[0, 1.14, 0.02]} rotation={[0.08, 0, 0]}>
-                  <cylinderGeometry args={[0.18, 0.22, 0.09, 32, 1, true]} />
-                  <meshStandardMaterial color={showHeatmap ? chestTension : fabricColor} roughness={0.3} side={THREE.DoubleSide} />
-                </mesh>
-                {/* Front Button Placket */}
-                <mesh position={[0, 0.45, 0.46]}>
-                  <boxGeometry args={[0.035, 0.85, 0.015]} />
-                  <meshStandardMaterial color="#1a1a20" roughness={0.4} />
-                </mesh>
-                {/* Long Sleeves with Cuffs */}
-                <mesh position={[-0.44, 0.62, 0]} rotation={[0, 0, 0.16]}>
-                  <cylinderGeometry args={[0.095, 0.08, 0.72, 24, 1, true]} />
-                  <meshPhysicalMaterial color={showHeatmap ? chestTension : fabricColor} roughness={0.25} clearcoat={0.8} side={THREE.DoubleSide} />
-                </mesh>
-                <mesh position={[0.44, 0.62, 0]} rotation={[0, 0, -0.16]}>
-                  <cylinderGeometry args={[0.095, 0.08, 0.72, 24, 1, true]} />
-                  <meshPhysicalMaterial color={showHeatmap ? chestTension : fabricColor} roughness={0.25} clearcoat={0.8} side={THREE.DoubleSide} />
-                </mesh>
+            {/* ═════════════════════════════════════════════════════════════
+                GARMENT 2: SCULPTURAL ASYMMETRIC DRAPE SHIRT
+                (Crisp White Egyptian Cotton, Spread Collar, Navy Polka-Dot Tie, Cuffs & Trousers)
+               ═════════════════════════════════════════════════════════════ */}
+            {(category === 'shirt' || prodId === 'PROD_SHIRT_02') && (
+              <group>
+                {/* Crisp Shirt Torso with rotation=[0, Math.PI, 0] */}
+                <group scale={[gShoulderScale, gHeightScale * 0.98, gChestScale]}>
+                  <mesh position={[0, 0.52, 0.01]} rotation={[0, Math.PI, 0]} castShadow receiveShadow>
+                    <cylinderGeometry args={[0.49, 0.43, 0.94, 48, 1, false]} />
+                    <meshStandardMaterial
+                      map={garmentTexture}
+                      roughness={showHeatmap ? 0.25 : 0.85}
+                      metalness={showHeatmap ? 0.2 : 0.05}
+                      color={showHeatmap ? chestTension : '#ffffff'}
+                      side={THREE.DoubleSide}
+                    />
+                  </mesh>
+
+                  {/* 3D Spread Collar Wings Folded Around Neck */}
+                  <mesh position={[0, 0.98, 0.04]} rotation={[0.12, 0, 0]}>
+                    <cylinderGeometry args={[0.19, 0.24, 0.10, 32, 1, true]} />
+                    <meshStandardMaterial color="#ffffff" roughness={0.3} side={THREE.DoubleSide} />
+                  </mesh>
+
+                  {/* 3D Left Collar Point */}
+                  <mesh position={[-0.10, 0.92, 0.20]} rotation={[0.08, -0.25, -0.3]}>
+                    <boxGeometry args={[0.08, 0.14, 0.015]} />
+                    <meshStandardMaterial color="#ffffff" roughness={0.3} />
+                  </mesh>
+
+                  {/* 3D Right Collar Point */}
+                  <mesh position={[0.10, 0.92, 0.20]} rotation={[0.08, 0.25, 0.3]}>
+                    <boxGeometry args={[0.08, 0.14, 0.015]} />
+                    <meshStandardMaterial color="#ffffff" roughness={0.3} />
+                  </mesh>
+
+                  {/* 3D Navy Silk Polka-Dot Tie Knot */}
+                  <mesh position={[0, 0.88, 0.22]} rotation={[Math.PI, 0, 0]}>
+                    <coneGeometry args={[0.046, 0.075, 4]} />
+                    <meshStandardMaterial color="#0f172a" roughness={0.25} metalness={0.3} />
+                  </mesh>
+
+                  {/* 3D Navy Silk Polka-Dot Tie Blade (Tapering Down Placket) */}
+                  <mesh position={[0, 0.56, 0.225]}>
+                    <boxGeometry args={[0.07, 0.54, 0.015]} />
+                    <meshStandardMaterial color="#0f172a" roughness={0.25} metalness={0.3} />
+                  </mesh>
+
+                  {/* White Tie Tip Point */}
+                  <mesh position={[0, 0.27, 0.225]} rotation={[0, 0, Math.PI / 4]}>
+                    <boxGeometry args={[0.05, 0.05, 0.015]} />
+                    <meshStandardMaterial color="#0f172a" roughness={0.25} metalness={0.3} />
+                  </mesh>
+                </group>
+
+                {/* Left Long Shirt Sleeve */}
+                <group position={[-0.44 * shoulderScale, 0.98, 0]} rotation={[0, 0, 0.14]}>
+                  <mesh position={[0, -0.42 * gHeightScale, 0]}>
+                    <cylinderGeometry args={[0.105 * gShoulderScale, 0.088 * gShoulderScale, 0.82 * gHeightScale, 28]} />
+                    <meshStandardMaterial
+                      map={garmentTexture}
+                      roughness={0.85}
+                      metalness={0.05}
+                      color={showHeatmap ? chestTension : '#ffffff'}
+                    />
+                  </mesh>
+                  {/* Buttoned Wrist Cuff */}
+                  <mesh position={[0, -0.83 * gHeightScale, 0]}>
+                    <cylinderGeometry args={[0.082 * gShoulderScale, 0.084 * gShoulderScale, 0.06, 24]} />
+                    <meshStandardMaterial color="#ffffff" roughness={0.4} />
+                  </mesh>
+                </group>
+
+                {/* Right Long Shirt Sleeve */}
+                <group position={[0.44 * shoulderScale, 0.98, 0]} rotation={[0, 0, -0.14]}>
+                  <mesh position={[0, -0.42 * gHeightScale, 0]}>
+                    <cylinderGeometry args={[0.105 * gShoulderScale, 0.088 * gShoulderScale, 0.82 * gHeightScale, 28]} />
+                    <meshStandardMaterial
+                      map={garmentTexture}
+                      roughness={0.85}
+                      metalness={0.05}
+                      color={showHeatmap ? chestTension : '#ffffff'}
+                    />
+                  </mesh>
+                  {/* Buttoned Wrist Cuff */}
+                  <mesh position={[0, -0.83 * gHeightScale, 0]}>
+                    <cylinderGeometry args={[0.082 * gShoulderScale, 0.084 * gShoulderScale, 0.06, 24]} />
+                    <meshStandardMaterial color="#ffffff" roughness={0.4} />
+                  </mesh>
+                </group>
+
+                {/* Tucked into Tailored Dark Trousers */}
+                <group scale={[gHipScale, gHeightScale, gHipScale]} position={[0, -0.18, 0]}>
+                  <mesh position={[0, 0.18, 0]} rotation={[0, Math.PI, 0]}>
+                    <cylinderGeometry args={[0.44, 0.42, 0.18, 36]} />
+                    <meshStandardMaterial map={suitTrouserTexture} roughness={0.7} />
+                  </mesh>
+                  <mesh position={[-0.21, -0.48, 0]}>
+                    <cylinderGeometry args={[0.16, 0.12, 1.05, 32]} />
+                    <meshStandardMaterial map={suitTrouserTexture} roughness={0.7} />
+                  </mesh>
+                  <mesh position={[0.21, -0.48, 0]}>
+                    <cylinderGeometry args={[0.16, 0.12, 1.05, 32]} />
+                    <meshStandardMaterial map={suitTrouserTexture} roughness={0.7} />
+                  </mesh>
+                </group>
               </group>
             )}
 
-            {/* OPTION C: STRUCTURED BLAZER */}
-            {category === 'jacket' && prodId === 'PROD_BLAZER_02' && (
-              <group scale={[shoulderScale * 1.06, heightScale * 0.99, chestScale * 0.88]}>
-                {/* Blazer Torso */}
-                <mesh geometry={blazerBodyGeo} castShadow receiveShadow>
-                  <meshPhysicalMaterial
-                    color={showHeatmap ? chestTension : fabricColor}
-                    roughness={showHeatmap ? 0.3 : fabricRoughness}
-                    metalness={showHeatmap ? 0.2 : fabricMetalness}
-                    clearcoat={fabricClearcoat}
-                    side={THREE.DoubleSide}
-                  />
-                </mesh>
-                {/* Notched Lapels */}
-                <mesh geometry={lapelGeo} position={[0.02, 0.32, 0.45]} rotation={[0.12, -0.28, -0.06]} castShadow>
-                  <meshStandardMaterial color={showHeatmap ? chestTension : fabricColor} roughness={0.3} metalness={0.5} />
-                </mesh>
-                <mesh geometry={lapelGeo} position={[-0.02, 0.32, 0.45]} rotation={[0.12, 0.28, 0.06]} scale={[-1, 1, 1]} castShadow>
-                  <meshStandardMaterial color={showHeatmap ? chestTension : fabricColor} roughness={0.3} metalness={0.5} />
-                </mesh>
-                {/* Horn Buttons */}
-                <mesh position={[0, 0.32, 0.49]} rotation={[Math.PI / 2, 0, 0]}>
-                  <cylinderGeometry args={[0.018, 0.018, 0.015, 16]} />
-                  <meshStandardMaterial color="#0a0a0c" metalness={0.7} />
-                </mesh>
-                {/* Tailored Sleeves */}
-                <mesh position={[-0.45, 0.58, 0]} rotation={[0, 0, 0.16]}>
-                  <cylinderGeometry args={[0.10, 0.085, 0.76, 24, 1, true]} />
-                  <meshPhysicalMaterial color={showHeatmap ? chestTension : fabricColor} roughness={fabricRoughness} metalness={fabricMetalness} side={THREE.DoubleSide} />
-                </mesh>
-                <mesh position={[0.45, 0.58, 0]} rotation={[0, 0, -0.16]}>
-                  <cylinderGeometry args={[0.10, 0.085, 0.76, 24, 1, true]} />
-                  <meshPhysicalMaterial color={showHeatmap ? chestTension : fabricColor} roughness={fabricRoughness} metalness={fabricMetalness} side={THREE.DoubleSide} />
-                </mesh>
+            {/* ═════════════════════════════════════════════════════════════
+                GARMENT 3: PLEATED MINIMALIST PANTALON
+                (High-Waisted Pinstripe Pleated Tailored Wool Trousers & Styled Top)
+               ═════════════════════════════════════════════════════════════ */}
+            {isTrousers && (
+              <group>
+                {/* Styled Tailored Top / Crop Top */}
+                <group scale={[gShoulderScale, gHeightScale * 0.98, gChestScale]}>
+                  <mesh position={[0, 0.58, 0.01]} rotation={[0, Math.PI, 0]}>
+                    <cylinderGeometry args={[0.48, 0.43, 0.76, 40]} />
+                    <meshStandardMaterial color="#ffffff" roughness={0.6} side={THREE.DoubleSide} />
+                  </mesh>
+                </group>
+
+                {/* High-Waisted Pinstripe Wide-Leg Trousers */}
+                <group scale={[gHipScale, gHeightScale, gHipScale]} position={[0, -0.18, 0]}>
+                  {/* High Waistband with Belt Loops & Clasp */}
+                  <mesh position={[0, 0.22, 0]} rotation={[0, Math.PI, 0]}>
+                    <cylinderGeometry args={[0.44, 0.42, 0.22, 40]} />
+                    <meshStandardMaterial
+                      map={garmentTexture}
+                      roughness={showHeatmap ? 0.3 : 0.75}
+                      metalness={showHeatmap ? 0.2 : 0.25}
+                      color={showHeatmap ? waistTension : '#ffffff'}
+                      side={THREE.DoubleSide}
+                    />
+                  </mesh>
+
+                  {/* Left Leg: Wide-Leg Architectural Pinstripe Pleat Drape */}
+                  <mesh position={[-0.21, -0.48, 0]} rotation={[0, Math.PI, 0]}>
+                    <cylinderGeometry args={[0.17, 0.13, 1.08, 36]} />
+                    <meshStandardMaterial
+                      map={garmentTexture}
+                      roughness={showHeatmap ? 0.3 : 0.75}
+                      metalness={showHeatmap ? 0.2 : 0.25}
+                      color={showHeatmap ? hipTension : '#ffffff'}
+                      side={THREE.DoubleSide}
+                    />
+                  </mesh>
+
+                  {/* Right Leg: Wide-Leg Architectural Pinstripe Pleat Drape */}
+                  <mesh position={[0.21, -0.48, 0]} rotation={[0, Math.PI, 0]}>
+                    <cylinderGeometry args={[0.17, 0.13, 1.08, 36]} />
+                    <meshStandardMaterial
+                      map={garmentTexture}
+                      roughness={showHeatmap ? 0.3 : 0.75}
+                      metalness={showHeatmap ? 0.2 : 0.25}
+                      color={showHeatmap ? hipTension : '#ffffff'}
+                      side={THREE.DoubleSide}
+                    />
+                  </mesh>
+                </group>
               </group>
             )}
 
-            {/* OPTION D: MINIMALIST SCULPTURAL TRENCH COAT */}
-            {category === 'jacket' && prodId !== 'PROD_BLAZER_02' && (
-              <group scale={[shoulderScale * 1.08, heightScale, chestScale * 0.90]}>
-                {/* Trench Body */}
-                <mesh geometry={trenchBodyGeo} castShadow receiveShadow>
-                  <meshPhysicalMaterial
-                    color={showHeatmap ? chestTension : fabricColor}
-                    roughness={showHeatmap ? 0.3 : fabricRoughness}
-                    metalness={showHeatmap ? 0.2 : fabricMetalness}
-                    clearcoat={fabricClearcoat}
-                    side={THREE.DoubleSide}
-                  />
-                </mesh>
-                {/* Lapels */}
-                <mesh geometry={lapelGeo} position={[0.02, 0.32, 0.46]} rotation={[0.12, -0.28, -0.06]} castShadow>
-                  <meshStandardMaterial color={showHeatmap ? chestTension : fabricColor} roughness={0.3} metalness={0.5} />
-                </mesh>
-                <mesh geometry={lapelGeo} position={[-0.02, 0.32, 0.46]} rotation={[0.12, 0.28, 0.06]} scale={[-1, 1, 1]} castShadow>
-                  <meshStandardMaterial color={showHeatmap ? chestTension : fabricColor} roughness={0.3} metalness={0.5} />
-                </mesh>
-                {/* Standing Collar */}
-                <mesh position={[0, 1.15, 0.02]} rotation={[0.08, 0, 0]}>
-                  <cylinderGeometry args={[0.22, 0.26, 0.14, 32, 1, true]} />
-                  <meshStandardMaterial color={showHeatmap ? chestTension : fabricColor} roughness={0.3} side={THREE.DoubleSide} />
-                </mesh>
-                {/* Waist Sash Belt with Brass Buckle */}
-                <mesh position={[0, 0.00, 0]} rotation={[Math.PI / 2, 0, 0]}>
-                  <torusGeometry args={[0.47, 0.035, 16, 48]} />
-                  <meshStandardMaterial color="#1a1a20" roughness={0.3} metalness={0.6} />
-                </mesh>
-                <mesh position={[0, 0.00, 0.49]}>
-                  <boxGeometry args={[0.12, 0.09, 0.025]} />
-                  <meshStandardMaterial color="#D4AF37" metalness={0.9} roughness={0.2} />
-                </mesh>
-                {/* Raglan Long Sleeves */}
-                <mesh position={[-0.46, 0.52, 0]} rotation={[0, 0, 0.16]}>
-                  <cylinderGeometry args={[0.11, 0.09, 0.82, 24, 1, true]} />
-                  <meshPhysicalMaterial color={showHeatmap ? chestTension : fabricColor} roughness={fabricRoughness} metalness={fabricMetalness} side={THREE.DoubleSide} />
-                </mesh>
-                <mesh position={[0.46, 0.52, 0]} rotation={[0, 0, -0.16]}>
-                  <cylinderGeometry args={[0.11, 0.09, 0.82, 24, 1, true]} />
-                  <meshPhysicalMaterial color={showHeatmap ? chestTension : fabricColor} roughness={fabricRoughness} metalness={fabricMetalness} side={THREE.DoubleSide} />
-                </mesh>
-              </group>
-            )}
+            {/* ═════════════════════════════════════════════════════════════
+                GARMENT 4: THE SCULPTURAL MINIMALIST TRENCH
+                (Double-Breasted Twill Overcoat, Belt, Buckle, Lapels & Epaulettes)
+               ═════════════════════════════════════════════════════════════ */}
+            {prodId === 'PROD_TRENCH_04' && (
+              <group>
+                {/* Trench Overcoat Torso */}
+                <group scale={[gShoulderScale * 1.04, gHeightScale, gChestScale * 1.02]}>
+                  <mesh position={[0, 0.34, 0.01]} rotation={[0, Math.PI, 0]} castShadow receiveShadow>
+                    <cylinderGeometry args={[0.53, 0.64, 1.38, 48, 1, false]} />
+                    <meshStandardMaterial
+                      map={garmentTexture}
+                      roughness={showHeatmap ? 0.3 : 0.65}
+                      metalness={showHeatmap ? 0.2 : 0.3}
+                      color={showHeatmap ? chestTension : '#ffffff'}
+                      side={THREE.DoubleSide}
+                    />
+                  </mesh>
 
-            {/* OPTION E: JAPANESE SELVEDGE DENIM JEANS */}
-            {category === 'jeans' && (
-              <group scale={[hipScale * 1.03, heightScale, hipScale * 1.02]} position={[0, -0.22, 0]}>
-                {/* Waistband */}
-                <mesh position={[0, 0.22, 0]} rotation={[Math.PI / 2, 0, 0]}>
-                  <torusGeometry args={[0.42, 0.038, 16, 48]} />
-                  <meshStandardMaterial color={showHeatmap ? waistTension : fabricColor} roughness={0.8} metalness={0.2} />
-                </mesh>
-                {/* Copper Rivet Button */}
-                <mesh position={[0, 0.22, 0.44]} rotation={[Math.PI / 2, 0, 0]}>
-                  <cylinderGeometry args={[0.016, 0.016, 0.02, 16]} />
-                  <meshStandardMaterial color="#b87333" metalness={0.9} roughness={0.3} />
-                </mesh>
-                {/* Pant Legs */}
-                <mesh position={[-0.21, -0.42, 0]}>
-                  <cylinderGeometry args={[0.145, 0.105, 0.95, 24, 1, true]} />
-                  <meshPhysicalMaterial
-                    color={showHeatmap ? hipTension : fabricColor}
-                    roughness={0.8}
-                    metalness={0.2}
-                    clearcoat={0.15}
-                    side={THREE.DoubleSide}
-                  />
-                </mesh>
-                <mesh position={[0.21, -0.42, 0]}>
-                  <cylinderGeometry args={[0.145, 0.105, 0.95, 24, 1, true]} />
-                  <meshPhysicalMaterial
-                    color={showHeatmap ? hipTension : fabricColor}
-                    roughness={0.8}
-                    metalness={0.2}
-                    clearcoat={0.15}
-                    side={THREE.DoubleSide}
-                  />
-                </mesh>
+                  {/* 3D Broad Trench Notch Lapel (Left) */}
+                  <mesh position={[-0.18, 0.72, 0.26]} rotation={[0.06, -0.22, -0.25]}>
+                    <boxGeometry args={[0.14, 0.46, 0.02]} />
+                    <meshStandardMaterial map={garmentTexture} roughness={0.65} />
+                  </mesh>
+
+                  {/* 3D Broad Trench Notch Lapel (Right) */}
+                  <mesh position={[0.18, 0.72, 0.26]} rotation={[0.06, 0.22, 0.25]}>
+                    <boxGeometry args={[0.14, 0.46, 0.02]} />
+                    <meshStandardMaterial map={garmentTexture} roughness={0.65} />
+                  </mesh>
+
+                  {/* 3D Tailored Waist Belt Cinch */}
+                  <mesh position={[0, 0.30, 0]}>
+                    <torusGeometry args={[0.49, 0.024, 16, 48]} />
+                    <meshStandardMaterial color="#0c0d10" roughness={0.5} />
+                  </mesh>
+
+                  {/* 3D Brass Buckle at Front */}
+                  <mesh position={[0, 0.30, 0.50]}>
+                    <boxGeometry args={[0.09, 0.08, 0.025]} />
+                    <meshStandardMaterial color="#d4af37" metalness={0.8} roughness={0.25} />
+                  </mesh>
+                </group>
+
+                {/* Left Raglan Overcoat Sleeve */}
+                <group position={[-0.44 * shoulderScale, 0.98, 0]} rotation={[0, 0, 0.14]}>
+                  <mesh position={[0, -0.44 * gHeightScale, 0]}>
+                    <cylinderGeometry args={[0.125 * gShoulderScale, 0.105 * gShoulderScale, 0.86 * gHeightScale, 28]} />
+                    <meshStandardMaterial
+                      map={garmentTexture}
+                      roughness={0.65}
+                      metalness={0.3}
+                      color={showHeatmap ? chestTension : '#ffffff'}
+                    />
+                  </mesh>
+                  {/* Wrist Belt Strap */}
+                  <mesh position={[0, -0.80 * gHeightScale, 0]}>
+                    <torusGeometry args={[0.095 * gShoulderScale, 0.012, 12, 24]} />
+                    <meshStandardMaterial color="#0a0a0c" />
+                  </mesh>
+                </group>
+
+                {/* Right Raglan Overcoat Sleeve */}
+                <group position={[0.44 * shoulderScale, 0.98, 0]} rotation={[0, 0, -0.14]}>
+                  <mesh position={[0, -0.44 * gHeightScale, 0]}>
+                    <cylinderGeometry args={[0.125 * gShoulderScale, 0.105 * gShoulderScale, 0.86 * gHeightScale, 28]} />
+                    <meshStandardMaterial
+                      map={garmentTexture}
+                      roughness={0.65}
+                      metalness={0.3}
+                      color={showHeatmap ? chestTension : '#ffffff'}
+                    />
+                  </mesh>
+                  {/* Wrist Belt Strap */}
+                  <mesh position={[0, -0.80 * gHeightScale, 0]}>
+                    <torusGeometry args={[0.095 * gShoulderScale, 0.012, 12, 24]} />
+                    <meshStandardMaterial color="#0a0a0c" />
+                  </mesh>
+                </group>
+
+                {/* Undercoat Trousers */}
+                <group scale={[gHipScale, gHeightScale, gHipScale]} position={[0, -0.18, 0]}>
+                  <mesh position={[-0.21, -0.58, 0]}>
+                    <cylinderGeometry args={[0.15, 0.12, 0.85, 28]} />
+                    <meshStandardMaterial color="#111216" roughness={0.7} />
+                  </mesh>
+                  <mesh position={[0.21, -0.58, 0]}>
+                    <cylinderGeometry args={[0.15, 0.12, 0.85, 28]} />
+                    <meshStandardMaterial color="#111216" roughness={0.7} />
+                  </mesh>
+                </group>
               </group>
             )}
 
@@ -692,66 +835,66 @@ export default function BiometricHologramModel({
             {/* Shoulder Caliper Span */}
             <group position={[0, 1.05, 0.05]}>
               <mesh rotation={[0, 0, Math.PI / 2]}>
-                <cylinderGeometry args={[0.003, 0.003, 0.88 * shoulderScale, 8]} />
+                <cylinderGeometry args={[0.003, 0.003, 0.90 * gShoulderScale, 8]} />
                 <meshBasicMaterial color={neonCyan} toneMapped={false} />
               </mesh>
             </group>
 
-            {/* Chest Fit Band */}
-            <group position={[0, 0.72, 0]} scale={[shoulderScale * 0.98, 1, chestScale * 0.86]}>
+            {/* Chest Fit Band (Rings measuring live ease clearance) */}
+            <group position={[0, 0.72, 0]} scale={[gShoulderScale * 0.98, 1, gChestScale * 1.05]}>
               <mesh rotation={[-Math.PI / 2, 0, 0]}>
-                <torusGeometry args={[0.49, 0.012, 16, 48]} />
+                <torusGeometry args={[0.51, 0.014, 16, 48]} />
                 <meshBasicMaterial
                   color={showHeatmap ? chestTension : neonCyan}
                   toneMapped={false}
                 />
               </mesh>
               <mesh rotation={[-Math.PI / 2, 0, 0]}>
-                <ringGeometry args={[0.46, 0.54, 48]} />
+                <ringGeometry args={[0.48, 0.56, 48]} />
                 <meshBasicMaterial
                   color={showHeatmap ? chestTension : neonCyan}
                   transparent
-                  opacity={0.25}
+                  opacity={0.3}
                   side={THREE.DoubleSide}
                 />
               </mesh>
             </group>
 
             {/* Waist Fit Band */}
-            <group position={[0, 0.28, 0]} scale={[waistScale * 0.96, 1, waistScale * 0.88]}>
+            <group position={[0, 0.28, 0]} scale={[gWaistScale * 0.98, 1, gWaistScale * 0.98]}>
               <mesh rotation={[-Math.PI / 2, 0, 0]}>
-                <torusGeometry args={[0.38, 0.012, 16, 48]} />
+                <torusGeometry args={[0.41, 0.014, 16, 48]} />
                 <meshBasicMaterial
                   color={showHeatmap ? waistTension : neonElectric}
                   toneMapped={false}
                 />
               </mesh>
               <mesh rotation={[-Math.PI / 2, 0, 0]}>
-                <ringGeometry args={[0.35, 0.42, 48]} />
+                <ringGeometry args={[0.38, 0.46, 48]} />
                 <meshBasicMaterial
                   color={showHeatmap ? waistTension : neonElectric}
                   transparent
-                  opacity={0.25}
+                  opacity={0.3}
                   side={THREE.DoubleSide}
                 />
               </mesh>
             </group>
 
             {/* Hip Fit Band */}
-            <group position={[0, -0.15, 0]} scale={[hipScale * 1.02, 1, hipScale * 0.92]}>
+            <group position={[0, -0.15, 0]} scale={[gHipScale * 1.02, 1, gHipScale * 1.02]}>
               <mesh rotation={[-Math.PI / 2, 0, 0]}>
-                <torusGeometry args={[0.47, 0.012, 16, 48]} />
+                <torusGeometry args={[0.49, 0.014, 16, 48]} />
                 <meshBasicMaterial
                   color={showHeatmap ? hipTension : neonCyan}
                   toneMapped={false}
                 />
               </mesh>
               <mesh rotation={[-Math.PI / 2, 0, 0]}>
-                <ringGeometry args={[0.44, 0.52, 48]} />
+                <ringGeometry args={[0.46, 0.54, 48]} />
                 <meshBasicMaterial
                   color={showHeatmap ? hipTension : neonCyan}
                   transparent
-                  opacity={0.25}
+                  opacity={0.3}
                   side={THREE.DoubleSide}
                 />
               </mesh>

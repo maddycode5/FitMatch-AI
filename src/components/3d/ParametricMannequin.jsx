@@ -7,6 +7,7 @@ export default function ParametricMannequin({
   profile,
   product,
   selectedSize,
+  fitPreference = 'regular',
   tensionMap,
   colorway,
   wearGarment = true,
@@ -37,6 +38,8 @@ export default function ParametricMannequin({
           <BiometricHologramModel
             profile={profile}
             product={product}
+            selectedSize={selectedSize}
+            fitPreference={fitPreference}
             tensionMap={tensionMap}
             colorway={colorway}
             wearGarment={wearGarment}
