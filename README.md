@@ -19,13 +19,13 @@
 
 ## ✦ Overview
 
-**FitMatch AI** is a minimal luxury fashion-tech platform built to permanently solve e-commerce sizing uncertainty and reverse logistics waste. Traditional apparel sizing relies on vanity sizing conventions and arbitrary brand comparisons (*e.g., "What size do you wear in Nike or Zara?"*), resulting in return rates exceeding 38% in premium apparel categories.
+**FitMatch AI** is a minimal luxury fashion-tech platform built to permanently eliminate e-commerce sizing uncertainty and reverse logistics waste. Traditional apparel retail relies on vanity sizing conventions and arbitrary brand comparisons (*e.g., "What size do you wear in Nike or Zara?"*), resulting in return rates exceeding 38% in premium apparel categories.
 
 FitMatch AI replaces brand guesswork with **standardized customer biometric profiles** and **direct physical garment ease comparisons**:
 
 $$\text{Garment Ease} = \text{Physical Garment Dimension} - \text{Customer Body Dimension}$$
 
-The platform couples a **deterministic category-aware sizing algorithm** with a **real-time 3D biometric holographic customizer** that drapes garments directly over your custom anatomical morphology.
+The platform couples a **deterministic category-aware sizing algorithm** with a **real-time 3D biometric holographic customizer** that drapes photorealistic garments from **The Virtual Archive** directly over your custom anatomical morphology.
 
 ---
 
@@ -50,16 +50,16 @@ FitMatch AI establishes a single, universal customer measurement profile persist
 ### 2. Deterministic Category-Aware Fit Engine
 Unlike opaque black-box recommendations, FitMatch AI utilizes transparent biomechanical ease formulas:
 
-* **Category Ease Targets:** Distinct bespoke tolerances for Tailored Jackets ($\sim +10\text{ to }+16\text{ cm}$), Dress Shirts ($\sim +6\text{ to }+10\text{ cm}$), Heavyweight T-Shirts ($\sim +8\text{ to }+14\text{ cm}$), and Selvedge Denim ($\sim +2\text{ to }+5\text{ cm}$).
-* **Customer Fit Preferences:** Dynamically adjusts scoring curves between **Slim** (close-to-body), **Regular** (tailored balance), and **Oversized** (relaxed architectural drape).
-* **Asymmetric Penalty Function:** Tightness ($\text{Ease} < \text{Target}$) is penalized **$2.5\times$ more severely** than excess room to prevent unwearable constriction.
+* **Category Ease Targets:** Distinct bespoke tolerances for Tailored Suits & Blazers ($\sim +10\text{ to }+16\text{ cm}$), Dress Shirts ($\sim +6\text{ to }+10\text{ cm}$), Minimalist Trousers ($\sim +2\text{ to }+5\text{ cm}$), and Overcoats ($\sim +14\text{ to }+20\text{ cm}$).
+* **Customer Fit Preferences:** Dynamically adjusts scoring curves between **Slim** (close-to-body contour), **Regular** (tailored balance), and **Oversized** (relaxed architectural drape).
+* **Asymmetric Penalty Function:** Tightness ($\text{Ease} < \text{Target}$) is penalized **$1.8\times$ more severely** than excess room to prevent unwearable constriction.
 * **Critical Minimum Boundary Checks:** Flags dealbreakers where a garment will physically fail to button, zip, or restrict shoulder articulation.
 * **Biomechanical Tension Stress Mapping:** Generates tension indexes normalized between $-1.0$ (critical pinch) and $+1.0$ (excess loose).
-* **Deterministic Dimension-by-Dimension Breakdown:** Surfaces transparent explanations (*e.g., "Chest: +4.2 cm ease (Optimal) • Shoulders: 46.2 cm (Exact match)"*).
+* **Live Dynamic Dimension Breakdown:** Real-time updates showing exact ease clearances (*e.g., "Chest: +10.6 cm ease (Optimal) • Shoulders: 45.0 cm (Exact match)"*).
 
 ---
 
-### 3. Real-Time 3D Biometric Hologram & Dynamic Wardrobe Try-On
+### 3. Real-Time 3D Biometric Hologram & Virtual Archive Draping
 Rendered via Three.js and `@react-three/fiber` inside a cinematic obsidian cyber-pod:
 
 * **Full-Body Biometric Avatar:**
@@ -71,21 +71,45 @@ Rendered via Three.js and `@react-three/fiber` inside a cinematic obsidian cyber
   * 22 vertical holographic laser stream rods with double emitter rings.
   * Sweeping planar horizontal scan disc continuously calibrating the avatar.
   * Concentric floor dais with soft cyan contact shadows.
-* **Dynamic Wardrobe Draping (No Static Meshes):**
-  * **The Sculptural Trench:** Architectural longline double-breasted overcoat with lapels, waist belt sash, and brass buckle.
-  * **Structured Blazer:** Super 150s worsted wool blazer with sharp notched lapels and button closure.
-  * **Heavy Cotton T-Shirt:** Dense 280 GSM combed cotton crewneck with ribbed collar and short sleeves.
-  * **Mulberry Silk Shirt:** Fluid dress shirt with spread collar, front button placket, and tailored cuffs.
-  * **Selvedge Denim Trouser:** Straight-leg Japanese denim jeans with waistband, copper rivet, and ankle taper.
-* **Real-Time Fabric Shader Swatches:**
-  * Instant PBR updates for **Void Noir**, **Alabaster Chalk**, **Desert Camel**, **Slate Sage**, and **Raw Indigo** modifying roughness, metalness, and clearcoat dynamics.
+* **Photorealistic Virtual Archive Garments (True 3D Tailored Apparel):**
+  * **Monochrome Cashmere Blazer & 3-Piece Suit:** Check wool houndstooth/tweed procedural weave, 3D peaked lapels, tailored waistcoat, striped silk necktie with knot and blade, folded crisp white linen pocket square, tailored sleeves with cuffs, and matching suit trousers.
+  * **Sculptural Asymmetric Drape Shirt:** Crisp Egyptian white cotton with natural fabric folds, 3D spread collar wings, 3D navy silk tie with white polka dots, long sleeves with buttoned wrist cuffs, tucked into tailored trousers.
+  * **Pleated Minimalist Pantalon:** High-waisted tailored waistband with belt loops and silver clasp button, architectural wide-leg drape with sharp vertical pinstripes and front pleat creases breaking over the shoes.
+  * **The Sculptural Minimalist Trench:** Double-breasted twill overcoat with broad storm flap lapels, horn buttons, 3D waist belt with brass buckle, and long overcoat sleeves with wrist adjustment straps.
+* **Procedural PBR CanvasTextile Engine (`RealGarmentTextures.js`):**
+  * High-definition 1024×1024 procedural textures generating houndstooth check wool, pinstripes, twill weaves, silk ties, and buttons.
+  * Correct UV alignment with forward-facing orientation (`rotation={[0, Math.PI, 0]}`).
 * **Holographic Fit Bands:**
-  * Caliper laser rings at Chest, Waist, Hips, and Shoulders measuring garment ease against body morphology.
+  * Caliper laser rings at Chest, Waist, and Hips measuring garment clearance in centimeters.
 * **Biomechanical Tension Heatmap Overlay:**
   * 🟢 **Emerald Green:** Optimal Ease (target bespoke comfort).
   * 🔴 **Crimson Red:** Strained Fit ($<0\text{ cm}$ tight constriction/pinch).
   * 🟡 **Amber Yellow:** Snug tailored contour.
   * 🔵 **Cyan Blue:** Loose oversized drape.
+
+---
+
+### 4. Interactive Volumetric 3D Atelier Workspace
+* **Full-Width Top Header:** Title and descriptive subtitle span from left to right.
+* **4-Column Virtual Archive Recommendation Grid:** Clickable garment cards placed directly below the header with thumbnail images, match scores, prices, and unclipped text.
+* **50/50 Balanced Proportional Layout:** Equal-width frames with the 3D viewport stretching vertically to match the live telemetry panel.
+* **Dynamic Sizing & Fit Switching:** Instant recalculation when toggling sizes (`S` / `M` / `L` / `XL`) or fit preferences (`Slim` / `Regular` / `Oversized`).
+
+---
+
+### 5. Biomechanical Cloth Physics & Drape Simulator (`FitDemoSection.jsx`)
+* **Real-Time Textile Simulation:** Switch between **Raw Cashmere (380 GSM)**, **Mulberry Silk (120 GSM)**, and **Super 150s Wool (290 GSM)**.
+* **Dynamic Physical Indicators:**
+  * **Torso Compression & Tension (MPa):** Live tensile strain across the torso.
+  * **Sleeve Articulation Range (°):** Arm-raise mobility and seam stress.
+  * **Thermal Clo Index:** Microclimate breathability and luxury insulation.
+* **"Apply Fit To Atelier" Action:** Smoothly applies the selected drape physics to the 3D model.
+
+---
+
+### 6. Interactive Hero HUD Telemetry (`FloatingProductCards.jsx`)
+* **Docked Interactive Overlays:** Clickable cards displaying real-time shoulder bone alignment, chest drape ease, and zero-return-risk confidence score.
+* **Direct 3D Navigation:** Clicking either floating card smoothly navigates directly to the 3D Atelier.
 
 ---
 
@@ -104,7 +128,7 @@ FitMatch AI/
     ├── index.css                # Global glassmorphism, fonts, and scrollbar rules
     │
     ├── data/
-    │   └── products.js          # Physical garment size charts, fabrics, and colorways
+    │   └── products.js          # The Virtual Archive physical garment specifications
     │
     ├── engine/
     │   ├── types.js             # Physiological bounds, category ease matrices, & schemas
@@ -112,7 +136,8 @@ FitMatch AI/
     │
     └── components/
         ├── 3d/
-        │   ├── BiometricHologramModel.jsx # Full-body avatar & dynamic wardrobe draping
+        │   ├── BiometricHologramModel.jsx # Full-body avatar & Virtual Archive 3D apparel
+        │   ├── RealGarmentTextures.js     # High-definition procedural PBR textile generators
         │   ├── ParametricMannequin.jsx    # R3F canvas, cyber lights, & OrbitControls
         │   ├── GarmentHeroScene.jsx       # Hero 3D turntable scene
         │   ├── CyberAvatarModel.jsx       # Standalone biometric avatar module
@@ -122,8 +147,8 @@ FitMatch AI/
         │   └── Navbar.jsx                 # Luxury glassmorphic navigation header
         │
         ├── hero/
-        │   ├── HeroSection.jsx            # Headline, 3D viewport, and call-to-actions
-        │   └── FloatingProductCards.jsx   # Docked LiDAR HUD telemetry cards
+        │   ├── HeroSection.jsx            # Headline, 3D cyber-pod, and telemetry triggers
+        │   └── FloatingProductCards.jsx   # Interactive LiDAR HUD telemetry cards
         │
         ├── onboarding/
         │   ├── FitFinderModal.jsx         # Master multi-modal onboarding modal
@@ -132,13 +157,13 @@ FitMatch AI/
         │   └── PhotoUploadFlow.jsx        # Dual-angle photo quality analyzer
         │
         ├── showcase/
-        │   └── LuxuryGrid.jsx             # Interactive luxury wardrobe catalog
+        │   └── LuxuryGrid.jsx             # Interactive luxury wardrobe archive
         │
         ├── fit-engine/
-        │   └── FitDemoSection.jsx         # Live interactive sizing calculation matrix
+        │   └── FitDemoSection.jsx         # Live interactive cloth physics simulator
         │
         └── studio/
-            ├── ProductStudio3D.jsx        # 3D customizer, fabric swatches, & telemetry
+            ├── ProductStudio3D.jsx        # 50/50 Volumetric Atelier, 4-col archive grid, & telemetry
             └── FitFeedbackModal.jsx       # Customer calibration feedback dialog
 ```
 
@@ -205,13 +230,13 @@ flowchart TD
     D2 --> E
     D3 --> E
     B -- Yes --> E
-    E --> F["Browse Wardrobe Catalog"]
-    F --> G["Open 3D Customizer Studio"]
+    E --> F["Browse The Virtual Archive"]
+    F --> G["Open Volumetric 3D Customizer Studio"]
     G --> H["Deterministic Fit Engine Calculates True Ease"]
     H --> I1["Recommended Size Selected"]
     H --> I2["Dimension-by-Dimension Breakdown"]
-    H --> I3["Tension Heatmap Projected"]
-    G --> J["Select Clothing Item & Fabric Swatch"]
+    H --> I3["Biomechanical Tension Heatmap Projected"]
+    G --> J["Select Archive Garment, Fabric Weave & Fit Preference"]
     J --> K["Garment Drapes Dynamically Over 3D Biometric Avatar"]
     K --> L["Add Size to Bag with 0% Brand Guesswork"]
 ```
@@ -226,6 +251,9 @@ The repository's evolution is cleanly divided into structured milestones:
 * `33c0fd3`: `feat(onboarding): implement multi-modal body measurement ingestion flows`
 * `2915209`: `feat(ui): build luxury fashion-tech hero, telemetry HUD, and showcase grid`
 * `1582de8`: `feat(3d-studio): deliver full-body biometric hologram model and dynamic wardrobe draping engine`
+* `1e327f1`: `docs: add comprehensive architecture, features, and workflows README`
+* `6533c77`: `feat(3d-garments): implement photorealistic Virtual Archive tailored apparel, PBR procedural weaves, and dynamic morphological draping`
+* `dd3b1f4`: `feat: balance proportional 3D workspace, live fabric physics simulation, and interactive biometric HUD`
 
 ---
 
@@ -233,4 +261,3 @@ The repository's evolution is cleanly divided into structured milestones:
 
 Designed and engineered for **FitMatch AI**. Released under the [MIT License](LICENSE).
 Codebase authored by [@maddycode5](https://github.com/maddycode5).
-
