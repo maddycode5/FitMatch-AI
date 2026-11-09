@@ -112,8 +112,8 @@ export const gnaniKeyPool = {
 };
 
 export const GUIDED_BODY_FLOW = {
-  upper: ['chest_cm', 'shoulder_cm', 'neck_cm'],
-  lower: ['waist_cm', 'hip_cm', 'inseam_cm']
+  upper: ['chest_cm', 'shoulder_cm', 'neck_cm', 'arm_length_cm'],
+  lower: ['waist_cm', 'hip_cm', 'thigh_cm', 'inseam_cm']
 };
 
 export const DIMENSION_METADATA = {
@@ -128,7 +128,7 @@ export const DIMENSION_METADATA = {
     defaultCm: 98,
     category: 'upper',
     stepNumber: 1,
-    totalSteps: 3,
+    totalSteps: 4,
     instruction: 'Please measure around the fullest part of your chest, keeping the tape level under your armpits.',
     stepPrompt: "First, let's measure your chest. Please measure around the fullest part of your chest, keeping the tape level under your arms.",
     confirmSpoken: 'Chest measurement confirmed.',
@@ -145,7 +145,7 @@ export const DIMENSION_METADATA = {
     defaultCm: 45,
     category: 'upper',
     stepNumber: 2,
-    totalSteps: 3,
+    totalSteps: 4,
     instruction: 'Measure across the back of your shoulders from one bone point to the other.',
     stepPrompt: 'Next, measure across the back of your shoulders from bone to bone.',
     confirmSpoken: 'Shoulder width confirmed.',
@@ -162,7 +162,7 @@ export const DIMENSION_METADATA = {
     defaultCm: 39,
     category: 'upper',
     stepNumber: 3,
-    totalSteps: 3,
+    totalSteps: 4,
     instruction: 'Measure around the base of your neck where a tailored collar naturally sits.',
     stepPrompt: 'Next, measure around the base of your neck where a tailored collar naturally sits.',
     confirmSpoken: 'Neck measurement confirmed.',
@@ -178,7 +178,7 @@ export const DIMENSION_METADATA = {
     defaultCm: 82,
     category: 'lower',
     stepNumber: 1,
-    totalSteps: 3,
+    totalSteps: 4,
     instruction: 'Please measure around your natural waistline, midway between your lowest rib and navel.',
     stepPrompt: "Upper body complete! Now let's capture your lower body. First, please measure your natural waistline.",
     confirmSpoken: 'Waistline confirmed.',
@@ -194,11 +194,43 @@ export const DIMENSION_METADATA = {
     defaultCm: 96,
     category: 'lower',
     stepNumber: 2,
-    totalSteps: 3,
+    totalSteps: 4,
     instruction: 'Stand with your feet together and measure around the fullest circumference of your hips.',
     stepPrompt: 'Next, stand with feet together and measure around the fullest part of your hips.',
     confirmSpoken: 'Hip measurement confirmed.',
     testPhrases: ['Hips are 96 centimetres.', 'Seat is 38 inches.']
+  },
+  arm_length_cm: {
+    key: 'arm_length_cm',
+    label: 'Arm / Sleeve Length',
+    spokenAliases: [
+      'arm length', 'arm', 'arms', 'sleeve', 'sleeves', 'sleeve length', 'sleeve size',
+      'baanh', 'bazu', 'haath'
+    ],
+    defaultCm: 63,
+    category: 'upper',
+    stepNumber: 4,
+    totalSteps: 4,
+    instruction: 'Measure from your shoulder point along the outer arm to your wrist bone.',
+    stepPrompt: 'Finally for upper body, measure from your shoulder point down to your wrist bone.',
+    confirmSpoken: 'Arm and sleeve length confirmed.',
+    testPhrases: ['Sleeve length is 63 centimetres.', 'Arm length 62 cm.']
+  },
+  thigh_cm: {
+    key: 'thigh_cm',
+    label: 'Thigh Circumference',
+    spokenAliases: [
+      'thigh', 'thighs', 'around thigh', 'thigh circumference', 'thigh measurement',
+      'jaangh', 'jangh', 'raan'
+    ],
+    defaultCm: 56,
+    category: 'lower',
+    stepNumber: 3,
+    totalSteps: 4,
+    instruction: 'Measure around the fullest part of your upper thigh just below the crotch.',
+    stepPrompt: 'Next, measure around the fullest part of your upper thigh just below your crotch.',
+    confirmSpoken: 'Thigh circumference confirmed.',
+    testPhrases: ['Thigh is 56 centimetres.', 'Around thigh 55 cm.']
   },
   inseam_cm: {
     key: 'inseam_cm',
@@ -209,8 +241,8 @@ export const DIMENSION_METADATA = {
     ],
     defaultCm: 80,
     category: 'lower',
-    stepNumber: 3,
-    totalSteps: 3,
+    stepNumber: 4,
+    totalSteps: 4,
     instruction: 'Measure vertically along your inner leg seam from your crotch down to your ankle bone.',
     stepPrompt: 'Finally, measure vertically along your inner leg seam from crotch to ankle bone.',
     confirmSpoken: 'Inseam confirmed.',
@@ -223,7 +255,7 @@ export const DIMENSION_METADATA = {
     defaultCm: 178,
     category: 'upper',
     stepNumber: 0,
-    totalSteps: 3,
+    totalSteps: 4,
     instruction: 'Stand straight against a flat wall, measuring from floor to the top of your head.',
     stepPrompt: 'Total height measured.',
     confirmSpoken: 'Total height confirmed.',

@@ -9,6 +9,9 @@ MEASUREMENT_BOUNDS = {
     "neck_cm": {"min": 28, "max": 55, "label": "Neck Circumference"},
     "hip_cm": {"min": 65, "max": 160, "label": "Hips / Seat"},
     "inseam_cm": {"min": 55, "max": 110, "label": "Inseam (Inner Leg)"},
+    "thigh_cm": {"min": 38, "max": 95, "label": "Thigh Circumference"},
+    "arm_length_cm": {"min": 45, "max": 85, "label": "Arm / Sleeve Length"},
+    "sleeve_length_cm": {"min": 45, "max": 85, "label": "Sleeve Length"},
     "height_cm": {"min": 120, "max": 230, "label": "Total Height"}
 }
 
@@ -36,6 +39,18 @@ DIMENSION_ALIASES = {
     "inseam_cm": [
         "inseam", "in seam", "inner leg", "crotch to ankle", "pant length", 
         "pair", "taang", "inside leg"
+    ],
+    "thigh_cm": [
+        "thigh", "thighs", "around thigh", "thigh circumference", "upper leg",
+        "jaangh", "jangh", "raan"
+    ],
+    "arm_length_cm": [
+        "arm length", "arm", "arms", "sleeve", "sleeves", "sleeve length", 
+        "baanh", "bazu", "haath"
+    ],
+    "sleeve_length_cm": [
+        "sleeve", "sleeves", "sleeve length", "arm length", "cuff length",
+        "baanh", "bazu"
     ],
     "height_cm": [
         "height", "tall", "stature", "lambai", "kad", "kadd"

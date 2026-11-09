@@ -39,22 +39,27 @@ export default function VoiceMeasurementFlow({ initialProfile, onSave, onBack })
   const activeKeyRef = useRef('chest_cm');
   useEffect(() => { activeKeyRef.current = activeKey; }, [activeKey]);
 
-  // Customer measurements state (in cm)
+  // Customer measurements state (in cm) - starts empty for unverified profiles
   const [measurements, setMeasurements] = useState({
-    chest_cm: initialProfile?.measurements?.chest_cm || 98,
-    shoulder_cm: initialProfile?.measurements?.shoulder_cm || 45,
-    neck_cm: initialProfile?.measurements?.neck_cm || 39,
-    waist_cm: initialProfile?.measurements?.waist_cm || 82,
-    hip_cm: initialProfile?.measurements?.hip_cm || 96,
-    inseam_cm: initialProfile?.measurements?.inseam_cm || 80,
-    height_cm: initialProfile?.height_cm || 178
+    chest_cm: initialProfile?.measurements?.chest_cm || null,
+    shoulder_cm: initialProfile?.measurements?.shoulder_cm || null,
+    neck_cm: initialProfile?.measurements?.neck_cm || null,
+    waist_cm: initialProfile?.measurements?.waist_cm || null,
+    hip_cm: initialProfile?.measurements?.hip_cm || null,
+    inseam_cm: initialProfile?.measurements?.inseam_cm || null,
+    height_cm: initialProfile?.height_cm || null
   });
   const measurementsRef = useRef(measurements);
   useEffect(() => { measurementsRef.current = measurements; }, [measurements]);
 
   // Track which measurements have been confirmed
-  const [confirmedKeys, setConfirmedKeys] = useState(new Set());
-  const confirmedKeysRef = useRef(new Set());
+  const [confirmedKeys, setConfirmedKeys] = useState(() => {
+    if (initialProfile?.measurement_metadata?.verified_by_user && !initialProfile?.is_demo) {
+      return new Set(Object.keys(initialProfile.measurements || {}).filter(k => initialProfile.measurements[k]));
+    }
+    return new Set();
+  });
+  const confirmedKeysRef = useRef(confirmedKeys);
   useEffect(() => { confirmedKeysRef.current = confirmedKeys; }, [confirmedKeys]);
 
   // Multi-measurement extraction pending confirmation
@@ -322,8 +327,9 @@ export default function VoiceMeasurementFlow({ initialProfile, onSave, onBack })
         waist_cm: measurements.waist_cm,
         hip_cm: measurements.hip_cm,
         inseam_cm: measurements.inseam_cm,
-        arm_length_cm: initialProfile?.measurements?.arm_length_cm || 62,
-        thigh_cm: initialProfile?.measurements?.thigh_cm || 56
+        thigh_cm: measurements.thigh_cm || initialProfile?.measurements?.thigh_cm || null,
+        arm_length_cm: measurements.arm_length_cm || initialProfile?.measurements?.arm_length_cm || null,
+        sleeve_length_cm: measurements.arm_length_cm || initialProfile?.measurements?.sleeve_length_cm || null
       },
       measurement_metadata: {
         source: "voice_fastapi_gnani_proxy",
@@ -715,7 +721,13 @@ export default function VoiceMeasurementFlow({ initialProfile, onSave, onBack })
 
                   <div className="text-right flex items-center gap-2.5">
                     <div className="font-serif text-base sm:text-lg font-bold text-white">
-                      {currentVal} <span className="text-[10px] font-mono font-normal text-neutral-400">cm</span>
+                      {currentVal ? (
+                        <>
+                          {currentVal} <span className="text-[10px] font-mono font-normal text-neutral-400">cm</span>
+                        </>
+                      ) : (
+                        <span className="text-neutral-500 font-mono text-sm">—</span>
+                      )}
                     </div>
                     {isConfirmed ? (
                       <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-500/30">
