@@ -33,15 +33,22 @@ The platform couples a **deterministic category-aware sizing algorithm** with a 
 
 ### 1. Multi-Modal Universal Body Ingestion
 FitMatch AI establishes a single, universal customer measurement profile persisted across all brands:
-* **Mode A: Guided Manual Tape Entry**
+* **Mode 1: Hands-Free Voice Assistant (Gnani Prisma STT & Timbre TTS Engine)**
+  * **Step-by-Step Atelier Voice Guidance:** Speaks professional tailoring instructions sequentially across Upper Body (**#1 Chest $\to$ #2 Shoulder $\to$ #3 Neck**) and Lower Body (**#1 Waistline $\to$ #2 Hips $\to$ #3 Inseam**).
+  * **Gnani Prisma Speech Recognition (STT):** Continuous speech recognition streaming calibrated for Indian English (`en-IN`) and global accents.
+  * **Gnani Timbre & Voice Cloning (TTS):** Direct cloud neural voice pipeline with custom voice clone persona support and automatic local browser speech fallback.
+  * **Multi-Key Automatic Credit Failover (`GnaniKeyPool`):** Auto-rotates between Primary, Secondary Fallback, and Tertiary Backup API keys if credits exhaust, ensuring 100% continuous uptime.
+  * **Natural Language Biometric Parser:** Extracts dimensions and numbers (*e.g., "My chest measurement is 98 centimetres"*), converts units, and validates against human physiological limits.
+  * **Interactive Anatomical HUD:** SVG body silhouette with dynamic laser highlight bands illuminating each active measurement zone.
+* **Mode 2: Guided Manual Tape Entry**
   * Step-by-step visual placement guides for Chest, Waist, Hips, Shoulders, Inseam, Neck, and Sleeve length.
   * Instant metric ($\text{cm}$) / imperial ($\text{inches}$) conversion.
   * Strict physiological validation bounds (rejecting anatomically impossible inputs).
-* **Mode B: Real-Time WebCam Silhouette Scanner**
+* **Mode 3: Real-Time WebCam Silhouette Scanner**
   * Direct browser camera stream with holographic A-pose alignment guide.
   * 3-second capture countdown with motion stability checks.
   * Calibrated computer vision estimations with fine-tuning micro-sliders.
-* **Mode C: Dual Photo Upload (Front & Profile)**
+* **Mode 4: Dual Photo Upload (Front & Profile)**
   * Asynchronous front and lateral portrait dropzones.
   * Automatic aspect ratio, lighting quality, and background contrast checks.
 
@@ -222,13 +229,15 @@ FitMatch AI/
 ```mermaid
 flowchart TD
     A["Customer Visits Platform"] --> B{"Has Universal Profile?"}
-    B -- No --> C["Launch Fit Finder"]
-    C --> D1["Manual Tape Entry"]
-    C --> D2["WebCam Pose Scanner"]
-    C --> D3["Dual Photo Upload"]
+    B -- No --> C["Launch Fit Finder Modal"]
+    C --> D1["Mode 1: Voice Measurement Mode"]
+    C --> D2["Mode 2: Manual Tape Entry"]
+    C --> D3["Mode 3: WebCam Pose Scanner"]
+    C --> D4["Mode 4: Dual Photo Upload"]
     D1 --> E["Standardized Body Profile Created"]
     D2 --> E
     D3 --> E
+    D4 --> E
     B -- Yes --> E
     E --> F["Browse The Virtual Archive"]
     F --> G["Open Volumetric 3D Customizer Studio"]
@@ -245,5 +254,7 @@ flowchart TD
 
 ## ✦ License & Attribution
 
-Designed and engineered for **FitMatch AI**. Released under the [MIT License](LICENSE).
-Codebase authored by [@maddycode5](https://github.com/maddycode5).
+Released under the **[MIT License](LICENSE)**.  
+Copyright © 2026 **Madhav Kumar**. All rights reserved.
+
+Codebase authored and engineered by [@maddycode5](https://github.com/maddycode5).
