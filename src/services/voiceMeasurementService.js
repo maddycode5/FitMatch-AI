@@ -1,121 +1,114 @@
 /**
  * FitMatch AI Voice Measurement Service
- * Powered by Gnani Prisma (STT) and Gnani Timbre (TTS) Architecture
+ * Secure Backend Proxy Architecture (FastAPI + Gnani Prisma STT & Timbre TTS)
  * 
- * Capabilities:
- * 1. Speech-to-Text (STT) Speech Recognition (Gnani Prisma Protocol & Web Speech API)
- * 2. Natural Language Measurement Parsing & Extraction
- * 3. Physiological Range Validation against Human Biometrics
- * 4. Text-to-Speech (TTS) Conversational Audio Guidance (Gnani Timbre Architecture)
- * 5. Voice Cloning & Luxury Concierge Persona Simulation
+ * Architecture:
+ * - React Frontend: Microphone capture, audio playback, measurement UI
+ * - FastAPI Backend (http://localhost:8000): Secure proxy, validation, fallback management
+ * - Gnani Prisma: Speech-to-Text (STT)
+ * - Gnani Timbre: Text-to-Speech (TTS)
+ * - FitMatch AI: Multi-measurement extraction, confirmation & body profile
+ * 
+ * ZERO secrets are stored in or exposed by the frontend bundle.
  */
 
 import { MEASUREMENT_BOUNDS } from '../engine/types';
 
-// Gnani API Configuration & Multi-Key Pool loaded from environment variables (.env)
-export const GNANI_CONFIG = {
-  accessKey: import.meta.env.VITE_GNANI_ACCESS_KEY || '',
-  token: import.meta.env.VITE_GNANI_TOKEN || import.meta.env.VITE_GNANI_ACCESS_KEY || '',
-  voiceCloneId: import.meta.env.VITE_GNANI_VOICE_CLONE_ID || '',
-  lang: import.meta.env.VITE_GNANI_LANG || 'en-IN',
-  ttsEndpoint: import.meta.env.VITE_GNANI_TTS_ENDPOINT || 'https://tts.gnani.ai/api/v1/tts',
-  sttEndpoint: import.meta.env.VITE_GNANI_STT_ENDPOINT || 'https://stt.gnani.ai/api/v1/stt'
-};
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
 /**
- * Intelligent Multi-Key Credit Rotation & Failover Manager
- * If Primary Key credit exhausts (HTTP 402, 429, 403, or quota error),
- * it automatically fails over to the Secondary Fallback Key instantly without interrupting the user.
+ * Backend Voice Proxy Status & Key Pool Listener
  */
-class GnaniKeyPoolManager {
+class BackendVoiceManager {
   constructor() {
-    this.keys = [
-      {
-        id: 'primary',
-        label: 'Primary Key',
-        accessKey: import.meta.env.VITE_GNANI_ACCESS_KEY || '',
-        token: import.meta.env.VITE_GNANI_TOKEN || import.meta.env.VITE_GNANI_ACCESS_KEY || ''
-      },
-      {
-        id: 'fallback_1',
-        label: 'Secondary Fallback Key',
-        accessKey: import.meta.env.VITE_GNANI_FALLBACK_ACCESS_KEY || '',
-        token: import.meta.env.VITE_GNANI_FALLBACK_TOKEN || import.meta.env.VITE_GNANI_FALLBACK_ACCESS_KEY || ''
-      },
-      {
-        id: 'fallback_2',
-        label: 'Tertiary Backup Key',
-        accessKey: import.meta.env.VITE_GNANI_BACKUP_ACCESS_KEY || '',
-        token: import.meta.env.VITE_GNANI_BACKUP_TOKEN || import.meta.env.VITE_GNANI_BACKUP_ACCESS_KEY || ''
-      }
-    ].filter(k => Boolean(k.accessKey));
-
-    this.exhaustedKeys = new Set();
+    this.status = {
+      isBackendOnline: false,
+      hasKeys: false,
+      activeKeyId: 'primary',
+      activeKeyLabel: 'Primary Key',
+      isAllExhausted: false,
+      badgeText: 'Connecting to Secure Voice Backend...',
+      isCloudActive: false,
+      voiceCloneId: 'tailor_concierge',
+      lang: 'en-IN'
+    };
     this.listeners = new Set();
+    this.checkHealth();
   }
 
   addStatusListener(fn) {
     this.listeners.add(fn);
+    fn(this.status);
     return () => this.listeners.delete(fn);
   }
 
   notify() {
-    const status = this.getStatus();
     this.listeners.forEach(fn => {
-      try { fn(status); } catch (e) { console.warn(e); }
+      try { fn(this.status); } catch (e) { console.warn(e); }
     });
   }
 
-  getActiveKey() {
-    return this.keys.find(k => !this.exhaustedKeys.has(k.id)) || null;
-  }
+  async checkHealth() {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/voice/status`, {
+        headers: { 'Accept': 'application/json' }
+      });
 
-  markExhausted(keyId, reason = 'credit_exhausted') {
-    if (!this.exhaustedKeys.has(keyId)) {
-      this.exhaustedKeys.add(keyId);
-      console.warn(`[Gnani Failover] Key '${keyId}' credits exhausted. (${reason}). Automatically switching to next available key in pool.`);
-      this.notify();
+      if (res.ok) {
+        const data = await res.json();
+        const pool = data.keyPool || {};
+        const isCloud = pool.has_keys && !pool.all_exhausted;
+
+        let badge = '✦ Secure Proxy • Local Speech Engine';
+        if (isCloud) {
+          badge = pool.active_key_id === 'primary'
+            ? '✦ Gnani Cloud (Primary Key Active)'
+            : `✦ Gnani Cloud (${pool.active_key_label || 'Fallback'} Active • Failover)`;
+        } else if (pool.all_exhausted) {
+          badge = 'Local Engine (Cloud Quota Exhausted)';
+        }
+
+        this.status = {
+          isBackendOnline: true,
+          hasKeys: Boolean(pool.has_keys),
+          activeKeyId: pool.active_key_id || null,
+          activeKeyLabel: pool.active_key_label || 'Primary Key',
+          isAllExhausted: Boolean(pool.all_exhausted),
+          badgeText: badge,
+          isCloudActive: isCloud,
+          voiceCloneId: data.gnaniConfig?.voiceCloneId || 'tailor_concierge',
+          lang: data.gnaniConfig?.lang || 'en-IN'
+        };
+      } else {
+        this.status = {
+          ...this.status,
+          isBackendOnline: false,
+          badgeText: 'Local Neural Speech Engine (Backend Offline)',
+          isCloudActive: false
+        };
+      }
+    } catch (err) {
+      this.status = {
+        ...this.status,
+        isBackendOnline: false,
+        badgeText: 'Local Neural Speech Engine (Standby)',
+        isCloudActive: false
+      };
     }
+    this.notify();
   }
 
   getStatus() {
-    const active = this.getActiveKey();
-    if (!active) {
-      return {
-        hasKeys: this.keys.length > 0,
-        isAllExhausted: this.keys.length > 0,
-        badgeText: this.keys.length > 0 ? 'Local Engine (Cloud Credits Exhausted)' : 'Local Engine (Free Sandbox Mode)',
-        isCloudActive: false,
-        keyId: null
-      };
-    }
-    return {
-      hasKeys: true,
-      isAllExhausted: false,
-      badgeText: active.id === 'primary' 
-        ? '✦ Gnani Cloud API (Primary Key Active)' 
-        : `✦ Gnani Cloud API (${active.label} Active • Failover)`,
-      isCloudActive: true,
-      keyId: active.id,
-      totalKeys: this.keys.length,
-      exhaustedCount: this.exhaustedKeys.size
-    };
+    return this.status;
   }
 }
 
-export const gnaniKeyPool = new GnaniKeyPoolManager();
+export const backendVoiceManager = new BackendVoiceManager();
 
-// Configured if user has provided at least one valid key in the pool
-export const isGnaniConfigured = Boolean(
-  gnaniKeyPool.getActiveKey() !== null
-);
-
-// Word-to-number mapping dictionary for spoken speech recognition
-const NUMBER_WORDS = {
-  zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9,
-  ten: 10, eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16,
-  seventeen: 17, eighteen: 18, nineteen: 19, twenty: 20, thirty: 30, forty: 40, fifty: 50,
-  sixty: 60, seventy: 70, eighty: 80, ninety: 90, hundred: 100, point: '.', half: 0.5
+// Compatibility alias for existing UI components
+export const gnaniKeyPool = {
+  getStatus: () => backendVoiceManager.getStatus(),
+  addStatusListener: (fn) => backendVoiceManager.addStatusListener(fn)
 };
 
 export const GUIDED_BODY_FLOW = {
@@ -129,7 +122,8 @@ export const DIMENSION_METADATA = {
     label: 'Chest / Bust',
     spokenAliases: [
       'chest', 'bust', 'pecs', 'chest measurement', 'chest size', 
-      'chess', 'chests', 'chast', 'chess size', 'around chest', 'around my chest'
+      'chess', 'chests', 'chast', 'chess size', 'around chest', 'around my chest',
+      'chhati', 'seena', 'chaati'
     ],
     defaultCm: 98,
     category: 'upper',
@@ -145,7 +139,8 @@ export const DIMENSION_METADATA = {
     label: 'Shoulder Width',
     spokenAliases: [
       'shoulder', 'shoulders', 'shoulder width', 'shoulder span', 
-      'across shoulders', 'sholder', 'sholders', 'soldier', 'across my shoulders'
+      'across shoulders', 'sholder', 'sholders', 'soldier', 'across my shoulders',
+      'kandha', 'kandhe', 'kandho'
     ],
     defaultCm: 45,
     category: 'upper',
@@ -161,7 +156,8 @@ export const DIMENSION_METADATA = {
     label: 'Neck Circumference',
     spokenAliases: [
       'neck', 'collar', 'around neck', 'around my neck', 'my neck', 
-      'neck circumference', 'neck size', 'throat', 'neck measurement'
+      'neck circumference', 'neck size', 'throat', 'neck measurement',
+      'gala', 'gale', 'kanth'
     ],
     defaultCm: 39,
     category: 'upper',
@@ -176,7 +172,8 @@ export const DIMENSION_METADATA = {
     key: 'waist_cm',
     label: 'Waistline',
     spokenAliases: [
-      'waist', 'waistline', 'stomach', 'belly', 'waist measurement', 'wasteline', 'around waist'
+      'waist', 'waistline', 'stomach', 'belly', 'waist measurement', 'wasteline', 'around waist',
+      'kamar', 'pet'
     ],
     defaultCm: 82,
     category: 'lower',
@@ -191,7 +188,8 @@ export const DIMENSION_METADATA = {
     key: 'hip_cm',
     label: 'Hips / Seat',
     spokenAliases: [
-      'hip', 'hips', 'seat', 'buttocks', 'around hips', 'hip measurement', 'hips measurement'
+      'hip', 'hips', 'seat', 'buttocks', 'around hips', 'hip measurement', 'hips measurement',
+      'kulhe'
     ],
     defaultCm: 96,
     category: 'lower',
@@ -206,7 +204,8 @@ export const DIMENSION_METADATA = {
     key: 'inseam_cm',
     label: 'Inseam (Inner Leg)',
     spokenAliases: [
-      'inseam', 'inner leg', 'crotch to ankle', 'pant length', 'in seam', 'inside leg', 'leg length'
+      'inseam', 'inner leg', 'crotch to ankle', 'pant length', 'in seam', 'inside leg', 'leg length',
+      'pair', 'taang'
     ],
     defaultCm: 80,
     category: 'lower',
@@ -220,7 +219,7 @@ export const DIMENSION_METADATA = {
   height_cm: {
     key: 'height_cm',
     label: 'Total Height',
-    spokenAliases: ['height', 'tall', 'stature', 'body height'],
+    spokenAliases: ['height', 'tall', 'stature', 'body height', 'lambai', 'kad', 'kadd'],
     defaultCm: 178,
     category: 'upper',
     stepNumber: 0,
@@ -232,13 +231,16 @@ export const DIMENSION_METADATA = {
   }
 };
 
+const NUMBER_WORDS = {
+  zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9,
+  ten: 10, eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16,
+  seventeen: 17, eighteen: 18, nineteen: 19, twenty: 20, thirty: 30, forty: 40, fifty: 50,
+  sixty: 60, seventy: 70, eighty: 80, ninety: 90, hundred: 100, point: '.', half: 0.5
+};
+
 /**
- * Parses spoken natural language into numerical values and dimensions
- * Example inputs:
- *  - "My chest measurement is 98 centimetres."
- *  - "Waist is 32 inches"
- *  - "Shoulders 45 cm"
- *  - "Confirm" / "Yes"
+ * Local fallback natural language measurement parser
+ * Used when backend is unavailable or offline
  */
 export function parseSpokenMeasurement(transcript, activeDimensionKey = 'chest_cm') {
   if (!transcript || typeof transcript !== 'string') {
@@ -247,8 +249,8 @@ export function parseSpokenMeasurement(transcript, activeDimensionKey = 'chest_c
 
   const clean = transcript.toLowerCase().trim();
 
-  // 1. Check for vocal confirmation/rejection intents
-  if (/\b(confirm|yes|correct|save|lock it|good|that is right|approve|done|proceed)\b/i.test(clean) && !/\d+/.test(clean)) {
+  // 1. Check for confirmation / rejection intents
+  if (/\b(confirm|yes|correct|save|lock it|good|that is right|approve|done|proceed|sahi hai|haan|theek hai)\b/i.test(clean) && !/\d+/.test(clean)) {
     return {
       success: true,
       intent: 'confirm',
@@ -256,7 +258,7 @@ export function parseSpokenMeasurement(transcript, activeDimensionKey = 'chest_c
     };
   }
 
-  if (/\b(cancel|no|wrong|redo|clear|stop|reject|repeat)\b/i.test(clean) && !/\d+/.test(clean)) {
+  if (/\b(cancel|no|wrong|redo|clear|stop|reject|repeat|nahi|galat|dobara|badlo)\b/i.test(clean) && !/\d+/.test(clean)) {
     return {
       success: true,
       intent: 'reject',
@@ -264,13 +266,12 @@ export function parseSpokenMeasurement(transcript, activeDimensionKey = 'chest_c
     };
   }
 
-  // 2. Identify the target body dimension from spoken words
+  // 2. Identify target body dimension
   let detectedDimensionKey = activeDimensionKey;
   let maxMatchedLength = 0;
 
   for (const [key, meta] of Object.entries(DIMENSION_METADATA)) {
     for (const alias of meta.spokenAliases) {
-      // Check for exact phrase or full-word match using boundary regex
       const escaped = alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const wordRegex = new RegExp(`(^|\\s|[^a-zA-Z0-9])${escaped}($|\\s|[^a-zA-Z0-9])`, 'i');
       if (wordRegex.test(clean)) {
@@ -284,15 +285,11 @@ export function parseSpokenMeasurement(transcript, activeDimensionKey = 'chest_c
 
   // 3. Extract numerical value
   let numericalValue = null;
-
-  // Check for direct digits (e.g. "98", "98.5")
   const digitMatch = clean.match(/(\d+(\.\d+)?)/);
   if (digitMatch) {
     numericalValue = parseFloat(digitMatch[1]);
   } else {
-    // Attempt spoken words to number parsing (e.g. "ninety eight")
     const words = clean.split(/[\s-]+/);
-    let currentNumber = 0;
     let accumulated = 0;
     let foundNumber = false;
 
@@ -302,8 +299,6 @@ export function parseSpokenMeasurement(transcript, activeDimensionKey = 'chest_c
         const val = NUMBER_WORDS[w];
         if (val === 100) {
           accumulated = (accumulated || 1) * 100;
-        } else if (val >= 20) {
-          accumulated += val;
         } else {
           accumulated += val;
         }
@@ -320,7 +315,7 @@ export function parseSpokenMeasurement(transcript, activeDimensionKey = 'chest_c
       intent: 'unknown_number',
       rawText: transcript,
       detectedDimension: detectedDimensionKey,
-      error: 'Could not detect a numerical value in what you said. Please say e.g., "My chest is 98 centimetres".'
+      error: 'Could not detect a numerical value. Please say e.g., "My chest is 98 centimetres".'
     };
   }
 
@@ -357,17 +352,57 @@ export function parseSpokenMeasurement(transcript, activeDimensionKey = 'chest_c
     unitSpoken,
     isValid,
     warning,
-    bounds
+    bounds,
+    measurements: [{
+      dimensionKey: detectedDimensionKey,
+      dimensionLabel: meta.label,
+      value_cm: valueInCm,
+      originalValue: numericalValue,
+      unitSpoken,
+      isValid,
+      warning,
+      bounds
+    }],
+    confirmationPrompt: isValid 
+      ? `Your ${meta.label} is ${valueInCm} centimetres. Is that correct?`
+      : warning
   };
 }
 
 /**
- * Text-to-Speech Engine (Gnani Timbre Cloud Protocol & Robust Web Speech Synthesis Fallback)
- * Features:
- * - Direct Gnani Cloud TTS API integration using account credits & cloned voice
- * - Anti-Garbage-Collection retention for local synth fallback
- * - Safe async cancellation queue (prevents deadlocks between utterances)
- * - Acoustic loop barge-in signaling to STT
+ * Backend Voice API Client
+ * Sends speech transcripts or audio to the secure FastAPI proxy
+ */
+export async function extractMeasurementsViaBackend(transcript, activeDimensionKey = 'chest_cm') {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/voice/extract`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        transcript,
+        default_dimension: activeDimensionKey
+      })
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      return {
+        ...data,
+        rawText: transcript
+      };
+    }
+  } catch (err) {
+    console.warn('[Backend Voice Proxy] Offline or unreachable, using local fallback:', err);
+  }
+
+  // Fallback to client-side extraction
+  return parseSpokenMeasurement(transcript, activeDimensionKey);
+}
+
+/**
+ * Text-to-Speech Engine
+ * Routes through FastAPI backend proxy (POST /api/voice/tts) to Gnani Timbre,
+ * falling back seamlessly to Web Speech API if backend requests fallback or is offline.
  */
 class TimbreTTSEngine {
   constructor() {
@@ -383,7 +418,6 @@ class TimbreTTSEngine {
     if (this.synth) {
       const loadVoices = () => {
         const voices = this.synth.getVoices();
-        // Prefer natural, elegant English voice (British / Savile Row style or neutral studio voice)
         this.selectedVoice = 
           voices.find(v => v.lang.includes('en-GB') || v.name.includes('Natural') || v.name.includes('Daniel') || v.name.includes('Google UK English')) ||
           voices.find(v => v.lang.startsWith('en')) || 
@@ -409,96 +443,70 @@ class TimbreTTSEngine {
     });
   }
 
-  /**
-   * Primary speech dispatch:
-   * Uses Gnani Cloud TTS API with cloned voice if API keys are configured in .env;
-   * otherwise falls back to local neural Web Speech API.
-   */
   speak(text, onEnd) {
     if (this.muted || !text) {
       if (onEnd) onEnd();
       return;
     }
 
-    if (isGnaniConfigured) {
-      this.speakWithGnaniCloud(text, onEnd);
-    } else {
-      this.speakLocal(text, onEnd);
-    }
+    this.speakWithBackendProxy(text, onEnd);
   }
 
-  async speakWithGnaniCloud(text, onEnd) {
-    let key = gnaniKeyPool.getActiveKey();
+  async speakWithBackendProxy(text, onEnd) {
+    try {
+      this.stop();
+      this.notifySpeaking(true);
 
-    while (key) {
-      try {
-        this.stop();
-        this.notifySpeaking(true);
+      const status = backendVoiceManager.getStatus();
 
-        const authKey = key.accessKey;
-        const authToken = key.token || authKey;
+      const res = await fetch(`${API_BASE_URL}/api/voice/tts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text,
+          voice_id: status.voiceCloneId || 'tailor_concierge',
+          lang: status.lang || 'en-IN',
+          speed: 0.95
+        })
+      });
 
-        const res = await fetch(GNANI_CONFIG.ttsEndpoint, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-access-key': authKey,
-            'accessKey': authKey,
-            'x-auth-token': authToken,
-            'token': authToken,
-            'Authorization': `Bearer ${authKey}`
-          },
-          body: JSON.stringify({
-            text,
-            voice_id: GNANI_CONFIG.voiceCloneId || 'tailor_concierge',
-            lang: GNANI_CONFIG.lang,
-            speed: 0.95,
-            format: 'mp3'
-          })
-        });
-
-        // Detect Credit Exhaustion / Quota Exceeded / Rate Limit errors
-        if (res.status === 402 || res.status === 429 || res.status === 403) {
-          gnaniKeyPool.markExhausted(key.id, `HTTP ${res.status} Quota/Credit limit reached`);
-          key = gnaniKeyPool.getActiveKey(); // Try next fallback key!
-          continue;
-        }
-
-        if (!res.ok) {
-          throw new Error(`Gnani API responded with HTTP ${res.status}`);
-        }
-
-        const audioBlob = await res.blob();
-        const audioUrl = URL.createObjectURL(audioBlob);
-        this.currentAudio = new Audio(audioUrl);
-
-        this.currentAudio.onended = () => {
-          URL.revokeObjectURL(audioUrl);
-          this.currentAudio = null;
-          this.notifySpeaking(false);
-          if (onEnd) onEnd();
-        };
-
-        this.currentAudio.onerror = (e) => {
-          console.warn('Gnani audio playback failed, falling back to local voice:', e);
-          URL.revokeObjectURL(audioUrl);
-          this.currentAudio = null;
-          this.speakLocal(text, onEnd);
-        };
-
-        await this.currentAudio.play();
-        return; // Successfully played audio with active key!
-
-      } catch (err) {
-        console.warn(`Key '${key.id}' failed, rotating to fallback:`, err);
-        gnaniKeyPool.markExhausted(key.id, err.message);
-        key = gnaniKeyPool.getActiveKey();
+      // If backend indicates fallback (e.g. quota exhausted or cloud unreachable)
+      if (res.headers.get('X-Voice-Fallback') === 'true' || !res.ok) {
+        console.log('[TTS Proxy] Backend requested local fallback:', res.headers.get('X-Voice-Error') || `HTTP ${res.status}`);
+        backendVoiceManager.checkHealth(); // Refresh status badge
+        this.speakLocal(text, onEnd);
+        return;
       }
-    }
 
-    // If all keys in pool are exhausted, seamlessly fallback to local device voice
-    console.log('[Gnani Failover] All Gnani cloud keys exhausted or unreachable. Using seamless local voice fallback.');
-    this.speakLocal(text, onEnd);
+      const audioBlob = await res.blob();
+      if (audioBlob.size === 0) {
+        this.speakLocal(text, onEnd);
+        return;
+      }
+
+      const audioUrl = URL.createObjectURL(audioBlob);
+      this.currentAudio = new Audio(audioUrl);
+
+      this.currentAudio.onended = () => {
+        URL.revokeObjectURL(audioUrl);
+        this.currentAudio = null;
+        this.notifySpeaking(false);
+        if (onEnd) onEnd();
+      };
+
+      this.currentAudio.onerror = (e) => {
+        console.warn('[TTS Proxy] Audio playback failed, using local speech:', e);
+        URL.revokeObjectURL(audioUrl);
+        this.currentAudio = null;
+        this.speakLocal(text, onEnd);
+      };
+
+      await this.currentAudio.play();
+
+    } catch (err) {
+      console.warn('[TTS Proxy] Connection error, using local speech fallback:', err);
+      this.speakLocal(text, onEnd);
+    }
   }
 
   speakLocal(text, onEnd) {
@@ -512,28 +520,25 @@ class TimbreTTSEngine {
       this.pendingTimeout = null;
     }
 
-    // Cancel existing speech safely
     if (this.synth.speaking || this.synth.pending) {
       this.synth.cancel();
     }
 
-    // Small delay ensures Chrome reset audio buffer cleanly without dropping next utterance
     this.pendingTimeout = setTimeout(() => {
       try {
         if (this.synth.paused) {
           this.synth.resume();
         }
 
-        const cleanText = text.replace(/([.?!])\s+/g, '$1, '); // Natural micro-pauses
+        const cleanText = text.replace(/([.?!])\s+/g, '$1, ');
         const utterance = new SpeechSynthesisUtterance(cleanText);
 
         if (this.selectedVoice) {
           utterance.voice = this.selectedVoice;
         }
-        utterance.rate = 0.96; // Calm, deliberate, non-rushed tailor cadence
+        utterance.rate = 0.96;
         utterance.pitch = 1.0;
 
-        // Anti-GC: Retain reference in set so Chromium garbage collector doesn't abort speech mid-phrase
         this.activeUtterances.add(utterance);
 
         utterance.onstart = () => {
@@ -543,15 +548,11 @@ class TimbreTTSEngine {
         const cleanup = () => {
           this.activeUtterances.delete(utterance);
           this.notifySpeaking(false);
-          if (onEnd) {
-            onEnd();
-          }
+          if (onEnd) onEnd();
         };
 
         utterance.onend = cleanup;
-        utterance.onerror = (e) => {
-          cleanup();
-        };
+        utterance.onerror = () => cleanup();
 
         this.synth.speak(utterance);
       } catch (err) {
@@ -591,12 +592,9 @@ class TimbreTTSEngine {
 }
 
 /**
- * Speech-to-Text Engine (Gnani Prisma Protocol & Continuous Web Speech API)
- * Features:
- * - Direct continuous microphone streaming without deadlocks or 10s lockout
- * - Auto-reconnect so speech recognition stays active during pauses
- * - Regional accent calibration (en-IN / en-US)
- * - Safe barge-in without dropping user speech
+ * Speech-to-Text Engine
+ * Uses continuous browser speech recognition with accent calibration
+ * and routes speech to backend /api/voice/extract for multi-measurement parsing
  */
 class PrismaSTTEngine {
   constructor(onTranscript, onStateChange, ttsInstance = null) {
@@ -614,8 +612,7 @@ class PrismaSTTEngine {
       this.recognition = new SpeechRecognition();
       this.recognition.continuous = true;
       this.recognition.interimResults = true;
-      // Regional accent calibration matching user configuration
-      this.recognition.lang = GNANI_CONFIG.lang || (typeof navigator !== 'undefined' && navigator.language) || 'en-IN';
+      this.recognition.lang = 'en-IN';
 
       this.recognition.onstart = () => {
         this.isListening = true;
@@ -623,7 +620,6 @@ class PrismaSTTEngine {
       };
 
       this.recognition.onresult = (event) => {
-        // Only ignore if TTS is actively outputting sound at this precise millisecond
         if (this.ttsInstance && this.ttsInstance.isSpeaking) {
           return;
         }
@@ -653,7 +649,6 @@ class PrismaSTTEngine {
 
       this.recognition.onerror = (event) => {
         if (event.error === 'no-speech') {
-          // Normal pause in user speaking, keep listening active
           return;
         }
         console.warn('STT recognition notice:', event.error);
@@ -663,16 +658,13 @@ class PrismaSTTEngine {
       this.recognition.onend = () => {
         this.isListening = false;
 
-        // Auto-reconnect loop: keeps listening alive if user enabled mic
         if (this.shouldListen) {
           if (this.restartTimer) clearTimeout(this.restartTimer);
           this.restartTimer = setTimeout(() => {
             if (this.shouldListen && !this.isListening) {
               try {
                 this.recognition.start();
-              } catch (e) {
-                // Ignore transient start collision
-              }
+              } catch (e) {}
             }
           }, 150);
         } else {
@@ -715,4 +707,3 @@ class PrismaSTTEngine {
 
 export const timbreTTS = new TimbreTTSEngine();
 export { PrismaSTTEngine };
-

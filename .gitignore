@@ -12,6 +12,11 @@ dist-ssr/
 .env
 .env.local
 .env.*.local
+backend/.env
+backend/.env.local
+*.pyc
+__pycache__/
+.venv/
 
 # Logs
 npm-debug.log*

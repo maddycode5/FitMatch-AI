@@ -14,15 +14,18 @@ import {
   Check,
   User,
   Radio,
-  Layers
+  Layers,
+  Server
 } from 'lucide-react';
 import { 
   DIMENSION_METADATA, 
   GUIDED_BODY_FLOW,
   parseSpokenMeasurement, 
+  extractMeasurementsViaBackend,
   timbreTTS, 
   PrismaSTTEngine,
-  gnaniKeyPool
+  backendVoiceManager,
+  API_BASE_URL
 } from '../../services/voiceMeasurementService';
 
 export default function VoiceMeasurementFlow({ initialProfile, onSave, onBack }) {
@@ -49,29 +52,32 @@ export default function VoiceMeasurementFlow({ initialProfile, onSave, onBack })
   const measurementsRef = useRef(measurements);
   useEffect(() => { measurementsRef.current = measurements; }, [measurements]);
 
-  // Track which measurements have been confirmed (guided flow starts fresh)
+  // Track which measurements have been confirmed
   const [confirmedKeys, setConfirmedKeys] = useState(new Set());
   const confirmedKeysRef = useRef(new Set());
   useEffect(() => { confirmedKeysRef.current = confirmedKeys; }, [confirmedKeys]);
 
+  // Multi-measurement extraction pending confirmation
+  const [pendingExtraction, setPendingExtraction] = useState(null);
+  const pendingExtractionRef = useRef(null);
+  useEffect(() => { pendingExtractionRef.current = pendingExtraction; }, [pendingExtraction]);
+
   // Voice Recognition states
   const [isListening, setIsListening] = useState(false);
   const [speechTranscript, setSpeechTranscript] = useState('');
-  const [lastExtracted, setLastExtracted] = useState(null);
-  const lastExtractedRef = useRef(null);
-  useEffect(() => { lastExtractedRef.current = lastExtracted; }, [lastExtracted]);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const [isMuted, setIsMuted] = useState(false);
   const [isTTSActive, setIsTTSActive] = useState(false);
   const [isSTTSupported, setIsSTTSupported] = useState(true);
-  const [cloudStatus, setCloudStatus] = useState(gnaniKeyPool.getStatus());
+  const [cloudStatus, setCloudStatus] = useState(backendVoiceManager.getStatus());
 
   const sttEngineRef = useRef(null);
   const interimDebounceRef = useRef(null);
 
-  // Subscribe to Gnani Key Pool failover status
+  // Subscribe to Backend Voice Proxy status
   useEffect(() => {
-    return gnaniKeyPool.addStatusListener((status) => {
+    return backendVoiceManager.addStatusListener((status) => {
       setCloudStatus(status);
     });
   }, []);
@@ -87,8 +93,7 @@ export default function VoiceMeasurementFlow({ initialProfile, onSave, onBack })
           if (interimDebounceRef.current) clearTimeout(interimDebounceRef.current);
           handleVoiceInput(final);
         } else if (interim && interim.trim().length > 0) {
-          // Live stream calibration: if interim contains digits or confirmation, process after natural 800ms pause
-          if (/\d+/.test(interim) || /\b(confirm|yes|correct|save)\b/i.test(interim)) {
+          if (/\d+/.test(interim) || /\b(confirm|yes|correct|save|sahi hai|haan)\b/i.test(interim)) {
             if (interimDebounceRef.current) clearTimeout(interimDebounceRef.current);
             interimDebounceRef.current = setTimeout(() => {
               handleVoiceInput(interim);
@@ -108,11 +113,11 @@ export default function VoiceMeasurementFlow({ initialProfile, onSave, onBack })
 
     setIsSTTSupported(sttEngineRef.current.isSupported());
 
-    // Auto-start microphone listening immediately
+    // Auto-start microphone listening
     sttEngineRef.current.start();
     setIsListening(true);
 
-    // Speak initial welcoming instruction strictly for Upper Body Step 1 (Chest)
+    // Initial welcoming prompt
     const activeMeta = DIMENSION_METADATA.chest_cm;
     if (activeMeta && !isMuted) {
       speakInstruction(`Voice Measurement Mode active. Let's start with your upper body. ${activeMeta.stepPrompt}`);
@@ -128,7 +133,7 @@ export default function VoiceMeasurementFlow({ initialProfile, onSave, onBack })
   }, []);
 
   const speakInstruction = (text) => {
-    if (isMuted) return;
+    if (isMuted || !text) return;
     setIsTTSActive(true);
     timbreTTS.speak(text, () => {
       setIsTTSActive(false);
@@ -147,46 +152,83 @@ export default function VoiceMeasurementFlow({ initialProfile, onSave, onBack })
     }
   };
 
-  const handleVoiceInput = (rawTranscript) => {
-    // Always use activeKeyRef to avoid stale closures from the speech recognition listener
-    const currentActiveKey = activeKeyRef.current;
-    const result = parseSpokenMeasurement(rawTranscript, currentActiveKey);
+  const handleVoiceInput = async (rawTranscript) => {
+    if (!rawTranscript || !rawTranscript.trim()) return;
+    setIsProcessing(true);
 
+    const currentActiveKey = activeKeyRef.current;
+    
+    // Call backend proxy for natural language extraction & physiological bounds validation
+    const result = await extractMeasurementsViaBackend(rawTranscript, currentActiveKey);
+    setIsProcessing(false);
+
+    // 1. Confirm Intent: "Yes" / "Correct" / "Confirm" / "Sahi hai"
     if (result.intent === 'confirm') {
-      // Voice confirmation intent: "Confirm" / "Yes"
-      const pending = lastExtractedRef.current;
-      if (pending && pending.isValid) {
-        confirmExtractedValue(pending.dimensionKey, pending.value_cm);
+      const pending = pendingExtractionRef.current;
+      if (pending && pending.measurements && pending.measurements.length > 0) {
+        confirmAllPending(pending.measurements);
       } else {
-        // Confirm the active key's current value
+        // Confirm single current active dimension
         const currKey = activeKeyRef.current;
         confirmExtractedValue(currKey, measurementsRef.current[currKey]);
       }
       return;
     }
 
+    // 2. Reject Intent: "No" / "Cancel" / "Wrong" / "Nahi"
     if (result.intent === 'reject') {
-      setLastExtracted(null);
-      lastExtractedRef.current = null;
+      setPendingExtraction(null);
+      pendingExtractionRef.current = null;
       setSpeechTranscript('');
       const currKey = activeKeyRef.current;
-      speakInstruction(`Cancelled. Please say your ${DIMENSION_METADATA[currKey]?.label} again.`);
+      speakInstruction(`Cancelled. Please speak your ${DIMENSION_METADATA[currKey]?.label} again.`);
       return;
     }
 
-    if (result.success && result.value_cm) {
-      setLastExtracted(result);
-      lastExtractedRef.current = result;
+    // 3. Extracted Measurement(s)
+    if (result.success && result.measurements && result.measurements.length > 0) {
+      setPendingExtraction(result);
+      pendingExtractionRef.current = result;
 
-      if (result.isValid) {
-        // Speak confirmation prompt via Gnani Timbre
-        speakInstruction(`${result.dimensionLabel} captured at ${result.value_cm} centimetres. Say "Confirm" or tap below.`);
-      } else {
-        speakInstruction(result.warning);
-      }
+      // Speak confirmation prompt via Gnani Timbre
+      const promptToSpeak = result.confirmationPrompt || 
+        `Captured ${result.measurements[0].dimensionLabel} at ${result.measurements[0].value_cm} centimetres. Is that correct?`;
+      speakInstruction(promptToSpeak);
     } else if (result.error) {
       speakInstruction(result.error);
     }
+  };
+
+  /**
+   * Confirms multiple measurements extracted in compound utterances
+   * e.g. "My chest is 98 centimetres and my waist is 82 centimetres."
+   */
+  const confirmAllPending = (measurementsList) => {
+    if (!measurementsList || measurementsList.length === 0) return;
+
+    const newMeasurements = { ...measurementsRef.current };
+    const updatedConfirmed = new Set(confirmedKeysRef.current);
+    const confirmedLabels = [];
+
+    measurementsList.forEach(m => {
+      if (m.isValid && m.dimensionKey) {
+        newMeasurements[m.dimensionKey] = m.value_cm;
+        updatedConfirmed.add(m.dimensionKey);
+        confirmedLabels.push(m.dimensionLabel);
+      }
+    });
+
+    setMeasurements(newMeasurements);
+    measurementsRef.current = newMeasurements;
+    setConfirmedKeys(updatedConfirmed);
+    confirmedKeysRef.current = updatedConfirmed;
+
+    setPendingExtraction(null);
+    pendingExtractionRef.current = null;
+    setSpeechTranscript('');
+
+    // Advance guided flow to next unconfirmed dimension
+    advanceGuidedFlow(updatedConfirmed, confirmedLabels.join(' and '));
   };
 
   const confirmExtractedValue = (dimensionKey, valueCm) => {
@@ -204,49 +246,48 @@ export default function VoiceMeasurementFlow({ initialProfile, onSave, onBack })
     setConfirmedKeys(updatedConfirmed);
     confirmedKeysRef.current = updatedConfirmed;
 
-    setLastExtracted(null);
-    lastExtractedRef.current = null;
+    setPendingExtraction(null);
+    pendingExtractionRef.current = null;
     setSpeechTranscript('');
 
+    advanceGuidedFlow(updatedConfirmed, DIMENSION_METADATA[targetKey]?.label);
+  };
+
+  const advanceGuidedFlow = (updatedConfirmed, confirmedLabel) => {
     const upperKeys = GUIDED_BODY_FLOW.upper;
     const lowerKeys = GUIDED_BODY_FLOW.lower;
     const currentCategory = activeCategoryRef.current;
 
-    // Check if we are currently in the Upper Body sequence
     if (currentCategory === 'upper') {
       const remainingUpper = upperKeys.filter(k => !updatedConfirmed.has(k));
 
       if (remainingUpper.length > 0) {
-        // Step to next upper body measurement
         const nextKey = remainingUpper[0];
         setActiveKey(nextKey);
         activeKeyRef.current = nextKey;
         const nextMeta = DIMENSION_METADATA[nextKey];
-        speakInstruction(`${DIMENSION_METADATA[targetKey]?.label} confirmed. ${nextMeta.stepPrompt}`);
+        speakInstruction(`${confirmedLabel} confirmed. ${nextMeta.stepPrompt}`);
       } else {
-        // All upper body measurements are done! Transition to Lower Body!
+        // Upper complete, switch to lower body
         setActiveCategory('lower');
         activeCategoryRef.current = 'lower';
-        const firstLowerKey = lowerKeys[0];
+        const firstLowerKey = lowerKeys.find(k => !updatedConfirmed.has(k)) || lowerKeys[0];
         setActiveKey(firstLowerKey);
         activeKeyRef.current = firstLowerKey;
         const nextMeta = DIMENSION_METADATA[firstLowerKey];
-        speakInstruction(`Upper body complete! Now let's capture your lower body measurements. ${nextMeta.stepPrompt}`);
+        speakInstruction(`Upper body complete! Let's capture your lower body measurements. ${nextMeta.stepPrompt}`);
       }
     } else {
-      // Currently in Lower Body sequence
       const remainingLower = lowerKeys.filter(k => !updatedConfirmed.has(k));
 
       if (remainingLower.length > 0) {
-        // Step to next lower body measurement
         const nextKey = remainingLower[0];
         setActiveKey(nextKey);
         activeKeyRef.current = nextKey;
         const nextMeta = DIMENSION_METADATA[nextKey];
-        speakInstruction(`${DIMENSION_METADATA[targetKey]?.label} confirmed. ${nextMeta.stepPrompt}`);
+        speakInstruction(`${confirmedLabel} confirmed. ${nextMeta.stepPrompt}`);
       } else {
-        // All upper and lower body measurements are completed!
-        speakInstruction(`Outstanding! All upper and lower body measurements are confirmed. You can now save your universal profile.`);
+        speakInstruction(`Outstanding! All measurements are confirmed. You can now save your universal profile.`);
       }
     }
   };
@@ -254,8 +295,8 @@ export default function VoiceMeasurementFlow({ initialProfile, onSave, onBack })
   const handleSelectDimension = (key) => {
     setActiveKey(key);
     activeKeyRef.current = key;
-    setLastExtracted(null);
-    lastExtractedRef.current = null;
+    setPendingExtraction(null);
+    pendingExtractionRef.current = null;
     setSpeechTranscript('');
     const meta = DIMENSION_METADATA[key];
     if (meta) {
@@ -285,34 +326,36 @@ export default function VoiceMeasurementFlow({ initialProfile, onSave, onBack })
         thigh_cm: initialProfile?.measurements?.thigh_cm || 56
       },
       measurement_metadata: {
-        source: "voice_gnani_guided",
+        source: "voice_fastapi_gnani_proxy",
         confidence_score: 0.99,
         verified_by_user: true
       }
     });
   };
 
-  // Structured in exact sequential order: Upper (Neck -> Shoulder -> Chest) and Lower (Waist -> Hips -> Inseam)
   const currentCategoryKeys = GUIDED_BODY_FLOW[activeCategory] || [];
   const categoryDimensions = currentCategoryKeys.map(k => [k, DIMENSION_METADATA[k]]);
-  const activeMeta = DIMENSION_METADATA[activeKey] || DIMENSION_METADATA.neck_cm;
+  const activeMeta = DIMENSION_METADATA[activeKey] || DIMENSION_METADATA.chest_cm;
 
-  // Status counters
   const upperConfirmedCount = GUIDED_BODY_FLOW.upper.filter(k => confirmedKeys.has(k)).length;
   const lowerConfirmedCount = GUIDED_BODY_FLOW.lower.filter(k => confirmedKeys.has(k)).length;
   const isUpperComplete = upperConfirmedCount === GUIDED_BODY_FLOW.upper.length;
   const isAllComplete = isUpperComplete && lowerConfirmedCount === GUIDED_BODY_FLOW.lower.length;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       
       {/* Top Header Bar */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-white/10 pb-4">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-white/10 pb-3 sm:pb-4 pr-10 sm:pr-14">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
             <span className="text-[10px] font-mono uppercase tracking-[0.2em] text-cyan-400 font-semibold">
               Voice-Guided Measurement Mode
+            </span>
+            <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-neutral-900 text-neutral-300 border border-white/10 flex items-center gap-1.5">
+              <Server className="w-3 h-3 text-cyan-400" />
+              <span>FastAPI Proxy (8000)</span>
             </span>
             {cloudStatus.isCloudActive ? (
               <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-500/40 flex items-center gap-1 shadow-[0_0_10px_rgba(16,185,129,0.2)]">
@@ -325,16 +368,24 @@ export default function VoiceMeasurementFlow({ initialProfile, onSave, onBack })
               </span>
             )}
           </div>
-          <h3 className="font-serif text-2xl text-white font-medium mt-1">
+          <h3 className="font-serif text-xl sm:text-2xl text-white font-medium mt-1">
             Hands-Free Voice Calibration
           </h3>
           <p className="text-xs text-neutral-400 font-light mt-0.5">
-            Hold your measuring tape and speak naturally. Say e.g. <span className="text-cyan-300 font-mono italic">"{activeMeta.testPhrases?.[0] || 'My measurement is 98 cm'}"</span>
+            Hold your measuring tape and speak naturally. Say e.g. <span className="text-cyan-300 font-mono italic">"{activeMeta.testPhrases?.[0] || 'My chest is 98 centimetres'}"</span>
           </p>
         </div>
 
-        {/* Audio Speaker Mute Toggle */}
-        <div className="flex items-center gap-2">
+        {/* Audio Speaker Mute Toggle & Hear Instruction */}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <button
+            onClick={() => speakInstruction(activeMeta.instruction)}
+            className="px-3 py-1.5 rounded-full border border-cyan-500/40 bg-cyan-950/60 text-cyan-300 hover:bg-cyan-900 text-xs font-mono flex items-center gap-1.5 transition-all"
+            title="Hear instructions via Gnani Timbre TTS"
+          >
+            <Volume2 className="w-3.5 h-3.5" />
+            <span>Hear Instructions</span>
+          </button>
           <button
             onClick={() => {
               const muted = timbreTTS.toggleMute();
@@ -345,7 +396,7 @@ export default function VoiceMeasurementFlow({ initialProfile, onSave, onBack })
                 ? 'bg-neutral-800 border-white/10 text-neutral-400 hover:text-white'
                 : 'bg-cyan-950/80 border-cyan-400/50 text-cyan-300 shadow-[0_0_15px_rgba(0,240,255,0.2)]'
             }`}
-            title={isMuted ? 'Unmute Gnani Timbre Voice' : 'Mute Voice'}
+            title={isMuted ? 'Unmute Voice' : 'Mute Voice'}
           >
             {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
           </button>
@@ -353,13 +404,13 @@ export default function VoiceMeasurementFlow({ initialProfile, onSave, onBack })
       </div>
 
       {/* Main Two-Column Layout */}
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-4 sm:gap-5 items-start">
         
         {/* LEFT COLUMN: Visual Anatomical Guidance & Voice Waveform HUD (5 Cols) */}
-        <div className="md:col-span-5 rounded-2xl glass-panel p-5 border border-white/10 bg-[#070913] flex flex-col justify-between space-y-4">
+        <div className="md:col-span-5 rounded-2xl glass-panel p-3.5 sm:p-4 border border-white/10 bg-[#070913] flex flex-col justify-between space-y-3">
           
           {/* Active Target Banner */}
-          <div className="flex items-center justify-between border-b border-white/5 pb-3">
+          <div className="flex items-center justify-between border-b border-white/5 pb-2.5">
             <div className="flex items-center gap-2">
               <span className="text-[10px] font-mono uppercase tracking-widest text-neutral-400">
                 {activeCategory === 'upper' ? 'Upper Body Step' : 'Lower Body Step'}:
@@ -374,10 +425,9 @@ export default function VoiceMeasurementFlow({ initialProfile, onSave, onBack })
           </div>
 
           {/* Interactive Anatomical Pose Guide */}
-          <div className="relative w-full h-56 rounded-xl bg-gradient-to-b from-[#030611] to-[#0a0f1d] border border-cyan-500/20 flex items-center justify-center overflow-hidden">
+          <div className="relative w-full h-44 sm:h-52 rounded-xl bg-gradient-to-b from-[#030611] to-[#0a0f1d] border border-cyan-500/20 flex items-center justify-center overflow-hidden">
             
-            {/* SVG Anatomical Silhouette with Highlighted Target Zone */}
-            <svg viewBox="0 0 200 320" className="w-full h-full max-h-52 object-contain opacity-85">
+            <svg viewBox="0 15 200 300" className="w-full h-full max-h-40 sm:max-h-48 object-contain opacity-90">
               <defs>
                 <linearGradient id="bodyGrad" x1="0%" y1="0%" x2="0%" y2="100%">
                   <stop offset="0%" stopColor="#0ea5e9" stopOpacity="0.8" />
@@ -433,7 +483,7 @@ export default function VoiceMeasurementFlow({ initialProfile, onSave, onBack })
               <div className="flex items-center gap-2">
                 <span className={`w-2 h-2 rounded-full ${isListening ? 'bg-emerald-400 animate-ping' : 'bg-neutral-500'}`} />
                 <span className="text-neutral-300">
-                  {isListening ? 'Listening via Prisma STT...' : 'Mic Paused'}
+                  {isProcessing ? 'Backend Parsing...' : isListening ? 'Listening via STT...' : 'Mic Paused'}
                 </span>
               </div>
               <button 
@@ -448,8 +498,8 @@ export default function VoiceMeasurementFlow({ initialProfile, onSave, onBack })
           </div>
 
           {/* Timbre Spoken Instruction Box */}
-          <div className="p-3.5 rounded-xl bg-white/[0.03] border border-white/5 text-xs text-neutral-300 font-light leading-relaxed">
-            <span className="text-cyan-400 font-medium font-mono text-[10px] block uppercase mb-1">
+          <div className="p-2.5 sm:p-3 rounded-xl bg-white/[0.03] border border-white/5 text-xs text-neutral-300 font-light leading-relaxed">
+            <span className="text-cyan-400 font-medium font-mono text-[10px] block uppercase mb-0.5">
               Gnani Timbre Guidance:
             </span>
             "{activeMeta.instruction}"
@@ -458,7 +508,7 @@ export default function VoiceMeasurementFlow({ initialProfile, onSave, onBack })
           {/* Microphone Action Button */}
           <button
             onClick={toggleListening}
-            className={`w-full py-3.5 rounded-2xl text-xs uppercase tracking-[0.2em] font-semibold transition-all duration-300 flex items-center justify-center gap-2.5 shadow-xl ${
+            className={`w-full py-2.5 sm:py-3 rounded-2xl text-xs uppercase tracking-[0.2em] font-semibold transition-all duration-300 flex items-center justify-center gap-2 shadow-xl ${
               isListening
                 ? 'bg-rose-500 text-white shadow-[0_0_25px_rgba(244,63,94,0.4)] animate-pulse'
                 : 'bg-cyan-500 text-black hover:bg-cyan-400 shadow-[0_0_20px_rgba(0,240,255,0.3)]'
@@ -479,14 +529,13 @@ export default function VoiceMeasurementFlow({ initialProfile, onSave, onBack })
         </div>
 
         {/* RIGHT COLUMN: Measurements List & Validation / Confirmation Card (7 Cols) */}
-        <div className="md:col-span-7 space-y-5">
+        <div className="md:col-span-7 space-y-3 sm:space-y-3.5">
           
-          {/* Upper / Lower Body Category Selector Tabs with Progress Badges */}
+          {/* Upper / Lower Body Category Selector Tabs */}
           <div className="flex rounded-xl bg-neutral-900/80 p-1 border border-white/10">
             <button
               onClick={() => {
                 setActiveCategory('upper');
-                // Select first unconfirmed upper key or default to chest
                 const remaining = GUIDED_BODY_FLOW.upper.find(k => !confirmedKeys.has(k)) || 'chest_cm';
                 setActiveKey(remaining);
               }}
@@ -529,7 +578,7 @@ export default function VoiceMeasurementFlow({ initialProfile, onSave, onBack })
           </div>
 
           {/* Live Recognized Speech Transcript Box */}
-          <div className="p-3.5 rounded-2xl glass-panel border border-cyan-500/30 bg-[#080d19]/90 space-y-1.5">
+          <div className="p-2.5 sm:p-3 rounded-xl glass-panel border border-cyan-500/30 bg-[#080d19]/90 space-y-1">
             <div className="flex items-center justify-between text-[10px] font-mono">
               <span className="text-cyan-400 uppercase tracking-widest flex items-center gap-1.5">
                 <Radio className="w-3 h-3 animate-pulse" />
@@ -537,64 +586,86 @@ export default function VoiceMeasurementFlow({ initialProfile, onSave, onBack })
               </span>
               <span className="text-neutral-400">{isListening ? 'Live Listening...' : 'Waiting for voice input'}</span>
             </div>
-            <div className="font-mono text-sm text-white italic min-h-[24px]">
-              {speechTranscript ? `"${speechTranscript}"` : <span className="text-neutral-500 font-light text-xs">Speak your measurement (e.g. "{activeMeta.testPhrases?.[0]}")...</span>}
+            <div className="font-mono text-xs sm:text-sm text-white italic min-h-[20px]">
+              {speechTranscript ? `"${speechTranscript}"` : <span className="text-neutral-500 font-light text-xs">Speak your measurements (e.g. "My chest is 98 centimetres and my waist is 82 centimetres")...</span>}
             </div>
           </div>
 
-          {/* Extracted Measurement & Confirmation Card (Steps 5, 6, 7 in prompt) */}
-          {lastExtracted && (
-            <div className={`p-4 rounded-2xl border transition-all animate-fadeIn ${
-              lastExtracted.isValid 
-                ? 'bg-cyan-950/40 border-cyan-400 shadow-[0_0_20px_rgba(0,240,255,0.2)]' 
-                : 'bg-amber-950/40 border-amber-500'
-            }`}>
-              <div className="flex items-start justify-between">
+          {/* Extracted Measurements & Multi-Measurement Confirmation Card */}
+          {pendingExtraction && pendingExtraction.measurements && pendingExtraction.measurements.length > 0 && (
+            <div className="p-3 sm:p-3.5 rounded-xl border bg-cyan-950/40 border-cyan-400 shadow-[0_0_20px_rgba(0,240,255,0.2)] transition-all animate-fadeIn space-y-2.5">
+              <div className="flex items-center justify-between border-b border-cyan-500/20 pb-1.5">
                 <div>
-                  <span className="text-[10px] font-mono uppercase tracking-wider text-cyan-300">
-                    Extracted Measurement
+                  <span className="text-[10px] font-mono uppercase tracking-wider text-cyan-300 font-semibold">
+                    Gnani Prisma Recognized Measurements
                   </span>
-                  <div className="font-serif text-3xl font-bold text-white mt-0.5">
-                    {lastExtracted.dimensionLabel} — {lastExtracted.value_cm} cm
-                  </div>
-                  <div className="text-xs text-neutral-300 font-mono mt-1">
-                    Spoken: "{lastExtracted.rawText}" • Unit: {lastExtracted.unitSpoken}
-                  </div>
+                  <p className="text-[10px] text-neutral-400">
+                    Awaiting confirmation from user before saving to profile
+                  </p>
                 </div>
-
-                <div className="text-right">
-                  {lastExtracted.isValid ? (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-mono uppercase bg-emerald-950 text-emerald-300 border border-emerald-500/40">
-                      <Check className="w-3 h-3" />
-                      <span>Validated ✓</span>
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-mono uppercase bg-amber-950 text-amber-300 border border-amber-500/40">
-                      <AlertCircle className="w-3 h-3" />
-                      <span>Out of Bounds</span>
-                    </span>
-                  )}
-                </div>
+                <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-cyan-900/60 text-cyan-200 border border-cyan-500/40">
+                  {pendingExtraction.measurements.length} Detected
+                </span>
               </div>
 
-              {lastExtracted.warning && (
-                <p className="text-xs text-amber-300 mt-2 font-mono">
-                  {lastExtracted.warning}
-                </p>
+              {/* List of Detected Measurements */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {pendingExtraction.measurements.map((m, idx) => (
+                  <div 
+                    key={idx} 
+                    className="p-2 sm:p-2.5 rounded-lg bg-black/40 border border-white/10 flex items-center justify-between"
+                  >
+                    <div>
+                      <div className="text-xs font-semibold text-white">
+                        {m.dimensionLabel}
+                      </div>
+                      <div className="text-[9px] text-neutral-400 font-mono truncate max-w-[120px]">
+                        "{m.clauseText || speechTranscript}"
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-serif text-base sm:text-lg font-bold text-cyan-300">
+                        {m.value_cm} <span className="text-[10px] font-mono font-normal text-neutral-400">cm</span>
+                      </div>
+                      {m.isValid ? (
+                        <span className="text-[9px] font-mono text-emerald-400 flex items-center justify-end gap-1">
+                          <Check className="w-2.5 h-2.5" />
+                          <span>Valid</span>
+                        </span>
+                      ) : (
+                        <span className="text-[9px] font-mono text-amber-400 flex items-center justify-end gap-1">
+                          <AlertCircle className="w-2.5 h-2.5" />
+                          <span>Out of range</span>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Gnani Timbre Prompt Display */}
+              {pendingExtraction.confirmationPrompt && (
+                <div className="p-2 rounded-lg bg-white/[0.04] text-[10px] font-mono text-cyan-200 border border-cyan-500/20 flex items-center gap-2">
+                  <Volume2 className="w-3 h-3 text-cyan-400 flex-shrink-0" />
+                  <span>Gnani Timbre: "{pendingExtraction.confirmationPrompt}"</span>
+                </div>
               )}
 
               {/* Confirmation Action Buttons */}
-              <div className="flex items-center gap-3 mt-4 pt-3 border-t border-white/10">
+              <div className="flex items-center gap-2 pt-1">
                 <button
-                  onClick={() => confirmExtractedValue(lastExtracted.dimensionKey, lastExtracted.value_cm)}
-                  className="flex-1 py-2.5 rounded-xl bg-white text-black font-semibold text-xs uppercase tracking-wider hover:bg-neutral-200 transition-colors flex items-center justify-center gap-1.5 shadow-lg"
+                  onClick={() => confirmAllPending(pendingExtraction.measurements)}
+                  className="flex-1 py-2 rounded-lg bg-white text-black font-semibold text-[11px] uppercase tracking-wider hover:bg-neutral-200 transition-colors flex items-center justify-center gap-1.5 shadow-md"
                 >
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                  <span>Confirm Value (or say "Confirm")</span>
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Confirm Measurements</span>
                 </button>
                 <button
-                  onClick={() => setLastExtracted(null)}
-                  className="py-2.5 px-4 rounded-xl border border-white/10 text-xs font-mono text-neutral-400 hover:text-white transition-colors"
+                  onClick={() => {
+                    setPendingExtraction(null);
+                    pendingExtractionRef.current = null;
+                  }}
+                  className="py-2 px-3 rounded-lg border border-white/10 text-[11px] font-mono text-neutral-400 hover:text-white transition-colors"
                 >
                   Speak Again
                 </button>
@@ -602,8 +673,8 @@ export default function VoiceMeasurementFlow({ initialProfile, onSave, onBack })
             </div>
           )}
 
-          {/* Interactive Measurements List (Exact Upper/Lower Sequence) */}
-          <div className="space-y-2.5">
+          {/* Interactive Measurements List */}
+          <div className="space-y-1.5">
             <div className="flex justify-between items-center text-[10px] font-mono uppercase text-neutral-400 px-1">
               <span>{activeCategory === 'upper' ? 'Upper Body Dimensions (1 to 3)' : 'Lower Body Dimensions (1 to 3)'}</span>
               <span>Confirmed Value</span>
@@ -618,17 +689,17 @@ export default function VoiceMeasurementFlow({ initialProfile, onSave, onBack })
                 <div
                   key={dimKey}
                   onClick={() => handleSelectDimension(dimKey)}
-                  className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
+                  className={`p-2.5 sm:p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
                     isActive
                       ? 'bg-cyan-950/40 border-cyan-400 shadow-[0_0_15px_rgba(0,240,255,0.15)] ring-1 ring-cyan-400/40'
                       : 'bg-neutral-900/60 border-white/5 hover:border-white/20'
                   }`}
                 >
-                  <div className="flex items-center gap-3">
-                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center transition-colors ${
+                  <div className="flex items-center gap-2.5">
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
                       isActive ? 'bg-cyan-400 text-black' : isConfirmed ? 'bg-emerald-950 text-emerald-400' : 'bg-white/5 text-neutral-400'
                     }`}>
-                      {isConfirmed ? <Check className="w-4 h-4" /> : <User className="w-4 h-4" />}
+                      {isConfirmed ? <Check className="w-3.5 h-3.5" /> : <User className="w-3.5 h-3.5" />}
                     </div>
                     <div>
                       <div className="text-xs font-semibold text-white tracking-wide flex items-center gap-1.5">
@@ -636,15 +707,15 @@ export default function VoiceMeasurementFlow({ initialProfile, onSave, onBack })
                         <span>{meta.label}</span>
                         {isActive && <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />}
                       </div>
-                      <div className="text-[10px] text-neutral-400 font-light">
+                      <div className="text-[9px] text-neutral-400 font-light">
                         {meta.spokenAliases[meta.spokenAliases.length - 1]}
                       </div>
                     </div>
                   </div>
 
-                  <div className="text-right flex items-center gap-3">
-                    <div className="font-serif text-lg font-bold text-white">
-                      {currentVal} <span className="text-xs font-mono font-normal text-neutral-400">cm</span>
+                  <div className="text-right flex items-center gap-2.5">
+                    <div className="font-serif text-base sm:text-lg font-bold text-white">
+                      {currentVal} <span className="text-[10px] font-mono font-normal text-neutral-400">cm</span>
                     </div>
                     {isConfirmed ? (
                       <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-500/30">
@@ -661,24 +732,48 @@ export default function VoiceMeasurementFlow({ initialProfile, onSave, onBack })
             })}
           </div>
 
-          {/* Quick Voice Simulator Test Pills (Adapts dynamically to the active step) */}
-          <div className="pt-2 border-t border-white/10 space-y-2">
-            <span className="text-[10px] font-mono uppercase text-neutral-400 block">
-              Quick Voice Test Simulator for #{activeMeta.stepNumber} ({activeMeta.label}):
-            </span>
-            <div className="flex flex-wrap gap-2">
-              {(activeMeta.testPhrases || ['My measurement is 98 cm.']).map((phrase, idx) => (
+          {/* Quick Voice Simulator Test Section (Compound utterances & step phrases) */}
+          <div className="pt-2 border-t border-white/10 space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-mono uppercase text-neutral-400">
+                Voice Simulator Tests:
+              </span>
+              <span className="text-[9px] font-mono text-cyan-400">1-Click Test</span>
+            </div>
+
+            {/* Target Compound Experience Requested */}
+            <div className="p-2 rounded-xl bg-neutral-900/90 border border-cyan-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1.5">
+              <div className="text-[10px] font-mono text-cyan-300 truncate">
+                Target: "My chest is 98 cm and waist is 82 cm"
+              </div>
+              <button
+                onClick={() => handleQuickSpeechTest("My chest is 98 centimetres and my waist is 82 centimetres.")}
+                className="px-2.5 py-1 rounded-md bg-cyan-400 text-black font-semibold text-[9px] font-mono hover:bg-cyan-300 transition-all shadow whitespace-nowrap self-end sm:self-auto"
+              >
+                Test Compound Input
+              </button>
+            </div>
+
+            {/* Hindi / Hinglish and Active step phrases */}
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                onClick={() => handleQuickSpeechTest("Mera chest 98 centimetre aur kamar 82 cm hai")}
+                className="px-2 py-0.5 rounded-md bg-neutral-900 border border-white/10 text-[9px] font-mono text-neutral-300 hover:text-white hover:border-cyan-400/50 transition-all"
+              >
+                "Mera chest 98 cm aur kamar 82 cm"
+              </button>
+              {(activeMeta.testPhrases || ['My measurement is 98 cm.']).slice(0, 2).map((phrase, idx) => (
                 <button
                   key={idx}
                   onClick={() => handleQuickSpeechTest(phrase)}
-                  className="px-2.5 py-1 rounded-lg bg-neutral-900 border border-white/10 text-[10px] font-mono text-neutral-300 hover:text-white hover:border-cyan-400/50 transition-all"
+                  className="px-2 py-0.5 rounded-md bg-neutral-900 border border-white/10 text-[9px] font-mono text-neutral-300 hover:text-white hover:border-cyan-400/50 transition-all"
                 >
                   "{phrase}"
                 </button>
               ))}
               <button
                 onClick={() => handleQuickSpeechTest('Confirm')}
-                className="px-3 py-1 rounded-lg bg-cyan-950 border border-cyan-400/40 text-[10px] font-mono text-cyan-300 hover:bg-cyan-900 transition-all font-semibold"
+                className="px-2.5 py-0.5 rounded-md bg-cyan-950 border border-cyan-400/40 text-[9px] font-mono text-cyan-300 hover:bg-cyan-900 transition-all font-semibold"
               >
                 "Confirm"
               </button>
@@ -686,10 +781,10 @@ export default function VoiceMeasurementFlow({ initialProfile, onSave, onBack })
           </div>
 
           {/* Save to Profile Action */}
-          <div className="pt-4 flex items-center gap-3">
+          <div className="pt-2 flex items-center gap-3">
             <button
               onClick={onBack}
-              className="py-3 px-5 rounded-full border border-white/10 text-xs font-mono text-neutral-300 hover:text-white hover:border-white/30 transition-all flex items-center gap-1.5"
+              className="py-2.5 px-4 rounded-full border border-white/10 text-xs font-mono text-neutral-300 hover:text-white hover:border-white/30 transition-all flex items-center gap-1.5"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
               <span>Back</span>
@@ -697,7 +792,7 @@ export default function VoiceMeasurementFlow({ initialProfile, onSave, onBack })
 
             <button
               onClick={handleSaveAll}
-              className={`flex-1 py-3.5 rounded-full font-semibold text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-xl ${
+              className={`flex-1 py-2.5 sm:py-3 rounded-full font-semibold text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-xl ${
                 isAllComplete
                   ? 'bg-cyan-400 text-black hover:bg-cyan-300 shadow-[0_0_25px_rgba(0,240,255,0.4)] animate-pulse'
                   : 'bg-white text-black hover:bg-neutral-200'
@@ -715,4 +810,3 @@ export default function VoiceMeasurementFlow({ initialProfile, onSave, onBack })
     </div>
   );
 }
-
