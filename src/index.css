@@ -15,21 +15,23 @@ body {
   padding: 0;
 }
 
-/* Luxury Frosted Glass - Deep high-contrast obsidian */
-.glass-panel {
-  background: rgba(14, 14, 18, 0.88);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
-}
+@layer components {
+  /* Luxury Frosted Glass - Deep high-contrast obsidian */
+  .glass-panel {
+    background: rgba(14, 14, 18, 0.88);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+  }
 
-.glass-pill {
-  background: rgba(18, 18, 22, 0.92);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  .glass-pill {
+    background: rgba(18, 18, 22, 0.92);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  }
 }
 
 /* Subtle scrollbar */

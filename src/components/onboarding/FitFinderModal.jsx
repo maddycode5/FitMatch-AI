@@ -41,7 +41,7 @@ export default function FitFinderModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-2 sm:p-4 md:p-6 overflow-y-auto">
       {/* Backdrop */}
       <motion.div
         initial={{ opacity: 0 }}
@@ -57,18 +57,21 @@ export default function FitFinderModal({
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 15 }}
         transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-        className="relative z-10 w-full max-w-4xl glass-panel bg-[#0d0d0f] rounded-3xl border border-white/10 shadow-2xl p-6 sm:p-10 my-8 overflow-hidden"
+        className="relative z-10 w-full max-w-4xl max-h-[94vh] flex flex-col glass-panel bg-[#0d0d0f] rounded-3xl border border-white/10 shadow-2xl my-auto overflow-hidden"
       >
         {/* Close Button */}
         <button
           onClick={onClose}
-          className="absolute top-6 right-6 w-9 h-9 rounded-full bg-white/5 border border-white/10 hover:bg-white hover:text-black flex items-center justify-center text-neutral-300 transition-colors z-20"
+          className="absolute top-4 right-4 sm:top-6 sm:right-6 w-9 h-9 rounded-full bg-white/5 border border-white/10 hover:bg-white hover:text-black flex items-center justify-center text-neutral-300 transition-colors z-30 shadow-lg"
+          title="Close"
         >
           <X className="w-4 h-4" />
         </button>
 
-        {/* STAGE 1: METHOD SELECTION */}
-        {stage === 'method_selection' && (
+        {/* Scrollable Modal Body Container */}
+        <div className="overflow-y-auto p-4 sm:p-7 md:p-8 overscroll-contain flex-1">
+          {/* STAGE 1: METHOD SELECTION */}
+          {stage === 'method_selection' && (
           <div className="space-y-8">
             <div className="text-center max-w-xl mx-auto space-y-2">
               <span className="text-[11px] font-mono uppercase tracking-[0.25em] text-cyan-400">
@@ -292,6 +295,7 @@ export default function FitFinderModal({
           </div>
         )}
 
+        </div>
       </motion.div>
     </div>
   );

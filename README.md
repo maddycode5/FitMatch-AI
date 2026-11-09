@@ -33,12 +33,13 @@ The platform couples a **deterministic category-aware sizing algorithm** with a 
 
 ### 1. Multi-Modal Universal Body Ingestion
 FitMatch AI establishes a single, universal customer measurement profile persisted across all brands:
-* **Mode 1: Hands-Free Voice Assistant (Gnani Prisma STT & Timbre TTS Engine)**
-  * **Step-by-Step Atelier Voice Guidance:** Speaks professional tailoring instructions sequentially across Upper Body (**1 Chest $\to$ 2 Shoulder $\to$ 3 Neck**) and Lower Body (**1 Waistline $\to$ 2 Hips $\to$ 3 Inseam**).
-  * **Gnani Prisma Speech Recognition (STT):** Continuous speech recognition streaming calibrated for Indian English (`en-IN`) and global accents.
+* **Mode 1: Hands-Free Voice Assistant (Secure FastAPI Proxy + Gnani Prisma STT & Timbre TTS)**
+  * **Zero Client Secrets Architecture:** React Frontend contains zero API keys. All audio processing and credentials are securely proxied via FastAPI (`http://localhost:8000`).
+  * **Gnani Prisma Speech Recognition (STT):** Continuous speech recognition streaming calibrated for Indian English (`en-IN`), Hindi, and Hinglish.
   * **Gnani Timbre & Voice Cloning (TTS):** Direct cloud neural voice pipeline with custom voice clone persona support and automatic local browser speech fallback.
-  * **Multi-Key Automatic Credit Failover (`GnaniKeyPool`):** Auto-rotates between Primary, Secondary Fallback, and Tertiary Backup API keys if credits exhaust, ensuring 100% continuous uptime.
-  * **Natural Language Biometric Parser:** Extracts dimensions and numbers (*e.g., "My chest measurement is 98 centimetres"*), converts units, and validates against human physiological limits.
+  * **Multi-Measurement Spoken Extraction:** Recognizes compound sentences (e.g., *"My chest is 98 centimetres and my waist is 82 centimetres"*), splits clauses, converts units, and validates against physiological anthropometric bounds.
+  * **Spoken Confirmation Workflow:** Synthesizes voice confirmation prompt (*"Your Chest is 98 centimetres and Waist is 82 centimetres. Is that correct?"*) before values are committed to the user's profile.
+  * **Intelligent Multi-Key Credit Rotation (`GnaniFallbackManager`):** Rotates between Primary, Secondary Fallback, and Tertiary Backup API keys strictly on true quota exhaustion (HTTP 402, 429, 403), with cautious error handling and zero redundant charging on timeouts.
   * **Interactive Anatomical HUD:** SVG body silhouette with dynamic laser highlight bands illuminating each active measurement zone.
 * **Mode 2: Guided Manual Tape Entry**
   * Step-by-step visual placement guides for Chest, Waist, Hips, Shoulders, Inseam, Neck, and Sleeve length.
@@ -181,6 +182,8 @@ FitMatch AI/
 | Domain | Technology | Description |
 | :--- | :--- | :--- |
 | **Frontend Framework** | **React 18** | Concurrent rendering, state persistence, modular architecture |
+| **Backend Proxy** | **FastAPI (Python 3.10+)** | High-performance asynchronous API proxy, failover & validation |
+| **Voice AI Engine** | **Gnani Prisma & Timbre** | Continuous STT recognition, neural TTS synthesis & voice cloning |
 | **3D Rendering** | **Three.js** | WebGL graphics, custom procedural spline lathes, PBR materials |
 | **3D React Bridge** | **@react-three/fiber** | Declarative Three.js scene graph inside React components |
 | **3D Utilities** | **@react-three/drei** | `OrbitControls`, `Float`, `ContactShadows`, procedural lighting |
@@ -194,33 +197,45 @@ FitMatch AI/
 ## Getting Started Locally
 
 ### Prerequisites
-* **Node.js**: v18.0.0 or higher
-* **npm**: v9.0.0 or higher
+* **Node.js**: v18.0.0 or higher & **npm**: v9.0.0 or higher
+* **Python**: v3.10+ (for FastAPI secure backend proxy)
 
-### Installation
+### 1. Backend Setup (FastAPI Proxy)
+```bash
+# Navigate to backend directory
+cd backend
 
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/maddycode5/FitMatch-AI.git
-   cd "FitMatch AI"
-   ```
+# Install Python requirements
+pip install -r requirements.txt
 
-2. **Install dependencies:**
-   ```bash
-   npm install
-   ```
+# Configure backend environment variables
+cp .env.example .env
+# Fill in GNANI_ACCESS_KEY, GNANI_TOKEN, etc.
 
-3. **Start the local development server:**
-   ```bash
-   npm run dev
-   ```
-   Open [http://localhost:3000](http://localhost:3000) in your browser.
+# Start FastAPI voice proxy server
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+Backend runs at [http://localhost:8000](http://localhost:8000) (Interactive OpenAPI documentation at `/docs`).
 
-4. **Build for production:**
-   ```bash
-   npm run build
-   ```
-   The production-ready output will be generated in the `dist/` directory.
+### 2. Frontend Setup (React 18 + Vite)
+```bash
+# In the project root:
+npm install
+
+# Configure frontend environment variables
+cp .env.example .env
+# Sets VITE_API_BASE_URL=http://localhost:8000 (No API secrets on client!)
+
+# Start Vite dev server
+npm run dev
+```
+Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+### 3. Production Build
+```bash
+npm run build
+```
+The production bundle generates in `dist/`. Client scripts are completely free of private API keys.
 
 ---
 

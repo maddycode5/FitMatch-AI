@@ -185,50 +185,52 @@ export default function ProductStudio3D({
                 {/* Wear / Drape Wardrobe Garment Toggle */}
                 <button
                   onClick={() => setWearGarment(!wearGarment)}
-                  className={`glass-pill px-3 py-1.5 rounded-full text-[11px] font-mono tracking-wider flex items-center gap-1.5 transition-all ${
+                  className={`px-3 py-1.5 rounded-full text-[11px] font-mono tracking-wider flex items-center gap-1.5 transition-all border ${
                     wearGarment
-                      ? 'bg-cyan-500 text-black font-semibold shadow-[0_0_15px_rgba(0,240,255,0.4)]'
-                      : 'text-neutral-400 hover:text-white'
+                      ? 'bg-cyan-950/90 text-cyan-300 border-cyan-400/80 shadow-[0_0_15px_rgba(0,240,255,0.35)] ring-1 ring-cyan-400/40 font-semibold'
+                      : 'bg-neutral-900/95 text-white border-white/30 hover:border-cyan-400 hover:text-cyan-300 shadow-md font-medium'
                   }`}
                   title="Toggle Real Archive Garment Draping vs Pure Biometric Scan"
                 >
-                  <Shirt className="w-3.5 h-3.5" />
+                  <Shirt className={`w-3.5 h-3.5 ${wearGarment ? 'text-cyan-400' : 'text-neutral-300'}`} />
                   <span>{wearGarment ? 'Draped' : 'Naked Scan'}</span>
                 </button>
 
                 {/* Fit Measurement Bands Toggle */}
                 <button
                   onClick={() => setShowFitBands(!showFitBands)}
-                  className={`glass-pill px-3 py-1.5 rounded-full text-[11px] font-mono tracking-wider flex items-center gap-1.5 transition-all ${
+                  className={`px-3 py-1.5 rounded-full text-[11px] font-mono tracking-wider flex items-center gap-1.5 transition-all border ${
                     showFitBands
-                      ? 'bg-cyan-500/20 text-cyan-300 border-cyan-400/50 shadow-[0_0_12px_rgba(0,240,255,0.25)]'
-                      : 'text-neutral-400 hover:text-white'
+                      ? 'bg-cyan-950/90 text-cyan-300 border-cyan-400/80 shadow-[0_0_15px_rgba(0,240,255,0.35)] ring-1 ring-cyan-400/40 font-semibold'
+                      : 'bg-neutral-900/90 text-neutral-300 border-white/20 hover:text-white hover:border-white/40 font-medium'
                   }`}
                   title="Biometric Fit Bands: Active clearance rings measuring ease gap (in cm) between skin and cloth"
                 >
-                  <SlidersHorizontal className="w-3.5 h-3.5 text-cyan-400" />
+                  <SlidersHorizontal className={`w-3.5 h-3.5 ${showFitBands ? 'text-cyan-400' : 'text-neutral-400'}`} />
                   <span>{showFitBands ? 'Fit Bands' : 'Bands Off'}</span>
                 </button>
 
                 {/* Heatmap Tension Toggle */}
                 <button
                   onClick={() => setShowHeatmap(!showHeatmap)}
-                  className={`glass-pill px-3 py-1.5 rounded-full text-[11px] font-mono tracking-wider flex items-center gap-1.5 transition-all ${
+                  className={`px-3 py-1.5 rounded-full text-[11px] font-mono tracking-wider flex items-center gap-1.5 transition-all border ${
                     showHeatmap
-                      ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/50 shadow-[0_0_12px_rgba(16,185,129,0.3)]'
-                      : 'text-neutral-400 hover:text-white'
+                      ? 'bg-emerald-950/90 text-emerald-300 border-emerald-500/80 shadow-[0_0_15px_rgba(16,185,129,0.35)] ring-1 ring-emerald-400/40 font-semibold'
+                      : 'bg-neutral-900/90 text-neutral-300 border-white/20 hover:text-white hover:border-white/40 font-medium'
                   }`}
                   title="Fabric Tension Heatmap: Green = Optimal Ease, Red = Tight Strain, Blue = Relaxed Drape"
                 >
-                  <Activity className="w-3.5 h-3.5 text-emerald-400" />
+                  <Activity className={`w-3.5 h-3.5 ${showHeatmap ? 'text-emerald-400' : 'text-neutral-400'}`} />
                   <span>{showHeatmap ? 'Tension ON' : 'Heatmap'}</span>
                 </button>
 
                 {/* 360 Turntable Auto-Rotate Toggle */}
                 <button
                   onClick={() => setAutoRotate(!autoRotate)}
-                  className={`glass-pill p-2 rounded-full transition-all ${
-                    autoRotate ? 'bg-cyan-400 text-black' : 'text-neutral-400 hover:text-white'
+                  className={`p-2 rounded-full transition-all border ${
+                    autoRotate 
+                      ? 'bg-cyan-400 text-black border-cyan-300 shadow-[0_0_12px_rgba(0,240,255,0.4)]' 
+                      : 'bg-neutral-900/90 text-neutral-300 border-white/20 hover:text-white hover:border-white/40'
                   }`}
                   title="Toggle 360° Turntable"
                 >

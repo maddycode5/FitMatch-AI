@@ -18,7 +18,7 @@ export default function ParametricMannequin({
   return (
     <div className="w-full h-full relative cursor-grab active:cursor-grabbing select-none bg-[#040711]">
       <Canvas
-        camera={{ position: [0, 0.15, 4.8], fov: 40 }}
+        camera={{ position: [0, 0.05, 7.7], fov: 40 }}
         shadows
         gl={{ antialias: true, alpha: false }}
       >
@@ -59,11 +59,12 @@ export default function ParametricMannequin({
           color="#00f0ff"
         />
 
-        {/* Interactive 360 Orbit Controls */}
+        {/* Interactive 360 Orbit Controls with Default Max Zoom-Out */}
         <OrbitControls
+          target={[0, 0.05, 0]}
           enablePan={false}
-          minDistance={2.4}
-          maxDistance={7.0}
+          minDistance={2.2}
+          maxDistance={9.5}
           maxPolarAngle={Math.PI / 2 + 0.05}
           minPolarAngle={Math.PI / 4}
           dampingFactor={0.05}
