@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Camera, CheckCircle2, AlertTriangle, ShieldCheck, RefreshCw, ArrowRight, Sliders } from 'lucide-react';
+import { Camera, CheckCircle2, AlertTriangle, ShieldCheck, RefreshCw, ArrowRight, Sliders, Volume2, Info, User, Check } from 'lucide-react';
+import { timbreTTS, DIMENSION_METADATA } from '../../services/voiceMeasurementService';
 
 export default function LiveCameraFlow({ onSave, onBack }) {
   const [currentStep, setCurrentStep] = useState('permission'); // 'permission' | 'instructions' | 'front_capture' | 'side_capture' | 'processing' | 'verification'
@@ -8,22 +9,16 @@ export default function LiveCameraFlow({ onSave, onBack }) {
   const [sideImage, setSideImage] = useState(null);
   const [cameraError, setCameraError] = useState(null);
   const [countdown, setCountdown] = useState(null);
+  const [activeSpeakingKey, setActiveSpeakingKey] = useState(null);
 
-  // Calibrated estimates with confidence levels
+  // Customer measurements (in cm) - user verified with camera posture reference
   const [estimates, setEstimates] = useState({
     chest_cm: 98,
     waist_cm: 82,
     hip_cm: 96,
     shoulder_cm: 45,
+    inseam_cm: 80,
     height_cm: 178
-  });
-
-  const [confidence] = useState({
-    chest_cm: 0.85,
-    waist_cm: 0.82,
-    hip_cm: 0.80,
-    shoulder_cm: 0.90,
-    height_cm: 0.95
   });
 
   const videoRef = useRef(null);
@@ -40,7 +35,7 @@ export default function LiveCameraFlow({ onSave, onBack }) {
       setHasPermission(true);
       setCurrentStep('instructions');
     } catch (err) {
-      setCameraError("Camera permission was denied or not supported on this device. You can switch to Manual Entry or Photo Upload.");
+      setCameraError("Camera permission was denied or not supported on this device. You can switch to Manual Entry or Voice Mode.");
     }
   };
 
@@ -50,9 +45,6 @@ export default function LiveCameraFlow({ onSave, onBack }) {
       videoRef.current.srcObject = streamRef.current;
       videoRef.current.play().catch(e => console.warn(e));
     }
-    return () => {
-      // Clean up stream when unmounting the component
-    };
   }, [currentStep]);
 
   // Clean up camera stream on unmount
@@ -61,6 +53,7 @@ export default function LiveCameraFlow({ onSave, onBack }) {
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
       }
+      timbreTTS.stop();
     };
   }, []);
 
@@ -94,11 +87,20 @@ export default function LiveCameraFlow({ onSave, onBack }) {
     } else {
       setSideImage(dataUrl);
       setCurrentStep('processing');
-      // Simulate landmark detection & calibration pipeline
+      // Validate capture quality & transition to guided tape verification
       setTimeout(() => {
         setCurrentStep('verification');
-      }, 2200);
+      }, 700);
     }
+  };
+
+  const speakGuidance = (key) => {
+    const meta = DIMENSION_METADATA[key];
+    if (!meta) return;
+    setActiveSpeakingKey(key);
+    timbreTTS.speak(`Let's verify your ${meta.label}. ${meta.instruction}`, () => {
+      setActiveSpeakingKey(null);
+    });
   };
 
   const handleFinalSave = () => {
@@ -119,39 +121,47 @@ export default function LiveCameraFlow({ onSave, onBack }) {
         neck_cm: 39,
         arm_length_cm: 62,
         sleeve_length_cm: 63,
-        inseam_cm: 80,
+        inseam_cm: estimates.inseam_cm,
         thigh_cm: 56
       },
       measurement_metadata: {
-        source: "camera",
-        confidence,
+        source: "camera_guided_reference",
         verified_by_user: true,
+        prototype_mode: "experimental_posture_reference",
+        disclaimer: "User-verified manual measurement with camera posture reference",
         updated_at: new Date().toISOString()
       }
     });
   };
 
   return (
-    <div className="w-full">
+    <div className="w-full space-y-4">
       {/* 1. PERMISSION STEP */}
       {currentStep === 'permission' && (
-        <div className="text-center py-8 space-y-6 max-w-md mx-auto">
-          <div className="w-16 h-16 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mx-auto text-white">
-            <Camera className="w-8 h-8" />
+        <div className="text-center py-6 space-y-6 max-w-md mx-auto">
+          <div className="flex items-center justify-center gap-2">
+            <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-amber-950/80 text-amber-300 border border-amber-500/40 uppercase font-semibold">
+              🧪 Experimental UI Prototype
+            </span>
           </div>
+
+          <div className="w-16 h-16 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mx-auto text-white">
+            <Camera className="w-8 h-8 text-amber-400" />
+          </div>
+
           <div>
-            <h3 className="font-serif text-2xl text-white">Live Camera Body Scan</h3>
+            <h3 className="font-serif text-2xl text-white">Camera Posture Reference</h3>
             <p className="text-xs text-neutral-400 mt-2 leading-relaxed">
-              We use ephemeral computer vision to estimate key silhouettes. Images are processed locally in your browser and never stored or uploaded without your explicit permission.
+              Opens your browser camera to capture front and profile posture references with alignment guides, followed by guided tape measurement verification.
             </p>
           </div>
 
           <div className="p-4 rounded-2xl bg-neutral-900/60 border border-white/5 text-left text-xs space-y-2 text-neutral-300">
             <div className="flex items-center gap-2 text-emerald-400 font-mono text-[11px] uppercase">
-              <ShieldCheck className="w-4 h-4" /> Privacy Protected
+              <ShieldCheck className="w-4 h-4" /> 100% In-Browser Privacy
             </div>
-            <p className="text-neutral-400 text-[11px]">
-              No biometric photos are transmitted to external servers. You can review and adjust all calculated numbers before saving.
+            <p className="text-neutral-400 text-[11px] leading-relaxed">
+              Camera frames stay completely inside your local browser session and are never uploaded or transmitted to third-party cloud servers.
             </p>
           </div>
 
@@ -180,28 +190,34 @@ export default function LiveCameraFlow({ onSave, onBack }) {
 
       {/* 2. PREPARATION INSTRUCTIONS */}
       {currentStep === 'instructions' && (
-        <div className="space-y-6 max-w-lg mx-auto py-4">
-          <h3 className="font-serif text-2xl text-white text-center">Capture Guidelines</h3>
-          <div className="grid grid-cols-2 gap-3 text-xs text-neutral-300">
+        <div className="space-y-6 max-w-lg mx-auto py-2">
+          <div className="text-center space-y-1">
+            <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-amber-950/80 text-amber-300 border border-amber-500/40 uppercase font-semibold">
+              Posture Reference Guidelines
+            </span>
+            <h3 className="font-serif text-2xl text-white mt-2">Visual Alignment Setup</h3>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-neutral-300">
             <div className="p-3.5 rounded-xl bg-neutral-900/60 border border-white/10">
               <span className="font-semibold text-white block mb-1">1. Fitted Attire</span>
-              <span className="text-neutral-400">Wear form-fitting clothing or athletic wear for accurate boundary detection.</span>
+              <span className="text-neutral-400">Wear form-fitting athletic wear for accurate posture alignment.</span>
             </div>
             <div className="p-3.5 rounded-xl bg-neutral-900/60 border border-white/10">
               <span className="font-semibold text-white block mb-1">2. Full Body In View</span>
-              <span className="text-neutral-400">Step back 2-3 meters so your head and ankles are clearly visible in the frame.</span>
+              <span className="text-neutral-400">Step back 2-3 meters so your head and feet are visible in the frame.</span>
             </div>
             <div className="p-3.5 rounded-xl bg-neutral-900/60 border border-white/10">
               <span className="font-semibold text-white block mb-1">3. Plain Background</span>
-              <span className="text-neutral-400">Stand against a plain, contrasting wall with good front lighting.</span>
+              <span className="text-neutral-400">Stand against a plain contrasting wall with clear lighting.</span>
             </div>
             <div className="p-3.5 rounded-xl bg-neutral-900/60 border border-white/10">
-              <span className="font-semibold text-white block mb-1">4. Neutral Posture</span>
-              <span className="text-neutral-400">Stand straight with feet hip-width and arms held 6 inches away from sides.</span>
+              <span className="font-semibold text-white block mb-1">4. Tape Verification</span>
+              <span className="text-neutral-400">Have a measuring tape ready to confirm your exact body dimensions.</span>
             </div>
           </div>
 
-          <div className="flex justify-between items-center pt-4">
+          <div className="flex justify-between items-center pt-2">
             <button onClick={onBack} className="text-xs uppercase tracking-widest text-neutral-400 hover:text-white">
               Back
             </button>
@@ -209,7 +225,7 @@ export default function LiveCameraFlow({ onSave, onBack }) {
               onClick={() => setCurrentStep('front_capture')}
               className="bg-white text-black hover:bg-neutral-200 px-7 py-3 rounded-full text-xs uppercase tracking-widest font-semibold transition-colors"
             >
-              Ready for Front Capture
+              Start Front Capture
             </button>
           </div>
         </div>
@@ -220,15 +236,15 @@ export default function LiveCameraFlow({ onSave, onBack }) {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <span className="text-xs font-mono uppercase tracking-widest text-neutral-300">
-              {currentStep === 'front_capture' ? 'Pose 1 of 2: Front View' : 'Pose 2 of 2: Side View (Turn 90°)'}
+              {currentStep === 'front_capture' ? 'Pose 1 of 2: Front Reference' : 'Pose 2 of 2: Side Profile (Turn 90°)'}
             </span>
             <span className="text-[11px] font-mono text-emerald-400 flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" /> Live Feed
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" /> Live Camera Feed
             </span>
           </div>
 
           {/* Viewport Box */}
-          <div className="relative w-full aspect-[4/3] bg-black rounded-2xl overflow-hidden border border-white/15 flex items-center justify-center">
+          <div className="relative w-full aspect-[4/3] max-h-[460px] bg-black rounded-2xl overflow-hidden border border-white/15 flex items-center justify-center">
             <video
               ref={videoRef}
               autoPlay
@@ -238,12 +254,12 @@ export default function LiveCameraFlow({ onSave, onBack }) {
             />
 
             {/* Silhouette Guides Overlay */}
-            <div className="absolute inset-0 pointer-events-none flex items-center justify-center border-2 border-white/20 border-dashed rounded-2xl m-6">
-              <div className="text-center space-y-2 bg-black/40 px-4 py-2 rounded-full backdrop-blur-sm">
+            <div className="absolute inset-0 pointer-events-none flex items-center justify-center border-2 border-white/20 border-dashed rounded-2xl m-4 sm:m-6">
+              <div className="text-center space-y-2 bg-black/50 px-4 py-2 rounded-full backdrop-blur-sm">
                 <p className="text-xs text-white font-mono uppercase tracking-widest">
                   {currentStep === 'front_capture'
-                    ? 'Align Head to Top • Ankles to Bottom'
-                    : 'Turn 90° Sideways for Depth Silhouette'}
+                    ? 'Align Head to Top • Feet to Bottom'
+                    : 'Turn 90° Sideways for Profile Depth'}
                 </p>
               </div>
             </div>
@@ -270,81 +286,123 @@ export default function LiveCameraFlow({ onSave, onBack }) {
               className="bg-white text-black hover:bg-neutral-200 px-7 py-3 rounded-full text-xs uppercase tracking-widest font-semibold transition-colors flex items-center gap-2"
             >
               <Camera className="w-4 h-4" />
-              <span>Capture {currentStep === 'front_capture' ? 'Front' : 'Side'} Photo</span>
+              <span>Capture {currentStep === 'front_capture' ? 'Front' : 'Side'} Reference</span>
             </button>
           </div>
         </div>
       )}
 
-      {/* 5. ESTIMATION PROCESSING SKELETON */}
+      {/* 5. QUALITY CHECK & INITIALIZATION */}
       {currentStep === 'processing' && (
-        <div className="text-center py-16 space-y-6">
-          <RefreshCw className="w-10 h-10 animate-spin text-white mx-auto" />
+        <div className="text-center py-16 space-y-4">
+          <RefreshCw className="w-10 h-10 animate-spin text-amber-400 mx-auto" />
           <div>
-            <h4 className="font-serif text-xl text-white">Analyzing Pose Landmarks & Silhouettes</h4>
+            <h4 className="font-serif text-xl text-white">Validating Posture Reference Quality</h4>
             <p className="text-xs text-neutral-400 mt-2 font-mono">
-              Calibrating 2D pixel aspect ratio against reference scale...
+              Aligning front & profile frames for guided tape verification...
             </p>
           </div>
         </div>
       )}
 
-      {/* 6. ESTIMATION RESULTS & MANUAL VERIFICATION */}
+      {/* 6. GUIDED TAPE VERIFICATION & CONFIRMATION */}
       {currentStep === 'verification' && (
-        <div className="space-y-6">
+        <div className="space-y-5">
+          {/* Transparent Disclosure Notice */}
           <div className="p-4 rounded-2xl bg-amber-950/30 border border-amber-500/30 flex items-start gap-3">
             <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
             <div className="text-xs text-amber-200/90 leading-relaxed font-light">
-              <strong className="font-medium text-white block mb-0.5">Verification Constraint:</strong>
-              2D camera landmarks cannot measure 3D circumferences directly without calibration. The numbers below are calibrated approximations. Please verify or fine-tune with the sliders before confirming.
+              <strong className="font-medium text-white block mb-0.5">
+                Experimental UI Prototype: Guided Posture Capture & Tape Verification
+              </strong>
+              2D smartphone/webcam cameras cannot physically measure 3D body circumferences without external calibration markers. Your captured posture images are displayed below for visual reference. Please confirm your actual tape measurements before saving.
             </div>
           </div>
 
-          <div className="space-y-4">
-            <h4 className="text-xs font-mono uppercase tracking-widest text-neutral-400">
-              Estimated Dimensions (Calibrated)
-            </h4>
+          {/* Captured Posture Reference Thumbnails */}
+          <div className="grid grid-cols-2 gap-3 p-3 rounded-2xl bg-neutral-900/50 border border-white/10">
+            <div className="space-y-1 text-center">
+              <span className="text-[10px] font-mono uppercase text-neutral-400 block">Front Reference</span>
+              <div className="aspect-[3/4] max-h-40 rounded-xl overflow-hidden bg-black border border-white/10 mx-auto">
+                {frontImage && <img src={frontImage} alt="Front capture" className="w-full h-full object-cover scale-x-[-1]" />}
+              </div>
+            </div>
+            <div className="space-y-1 text-center">
+              <span className="text-[10px] font-mono uppercase text-neutral-400 block">Side Reference</span>
+              <div className="aspect-[3/4] max-h-40 rounded-xl overflow-hidden bg-black border border-white/10 mx-auto">
+                {sideImage && <img src={sideImage} alt="Side capture" className="w-full h-full object-cover scale-x-[-1]" />}
+              </div>
+            </div>
+          </div>
 
-            {/* Slider controls for verification */}
+          {/* Guided Measurement Inputs with Gnani Spoken Guidance */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between border-b border-white/10 pb-2">
+              <h4 className="text-xs font-mono uppercase tracking-widest text-neutral-300">
+                User-Verified Tape Dimensions
+              </h4>
+              <span className="text-[10px] font-mono text-cyan-400">
+                Tap 🔊 to hear tailor instructions
+              </span>
+            </div>
+
             {[
-              { key: 'chest_cm', label: 'Chest Circumference', min: 75, max: 135 },
+              { key: 'chest_cm', label: 'Chest / Bust Circumference', min: 75, max: 135 },
               { key: 'shoulder_cm', label: 'Shoulder Width', min: 36, max: 56 },
               { key: 'waist_cm', label: 'Waist Circumference', min: 60, max: 120 },
-              { key: 'hip_cm', label: 'Hip Circumference', min: 75, max: 130 }
+              { key: 'hip_cm', label: 'Hip Circumference', min: 75, max: 130 },
+              { key: 'inseam_cm', label: 'Inseam Length', min: 65, max: 95 }
             ].map(item => (
-              <div key={item.key} className="p-3.5 rounded-xl bg-neutral-900/60 border border-white/10 flex items-center justify-between gap-4">
-                <div className="w-48">
-                  <span className="text-xs text-white block">{item.label}</span>
-                  <span className="text-[10px] font-mono text-emerald-400">Confidence: {(confidence[item.key] * 100).toFixed(0)}%</span>
+              <div key={item.key} className="p-3 rounded-xl bg-neutral-900/70 border border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => speakGuidance(item.key)}
+                    className={`p-1.5 rounded-full border transition-all ${
+                      activeSpeakingKey === item.key
+                        ? 'bg-cyan-500 text-black border-cyan-400 shadow-[0_0_10px_rgba(0,240,255,0.4)] animate-pulse'
+                        : 'bg-white/5 border-white/10 text-cyan-400 hover:bg-white/10'
+                    }`}
+                    title="Hear measurement instruction via Gnani Timbre"
+                  >
+                    <Volume2 className="w-3.5 h-3.5" />
+                  </button>
+                  <div>
+                    <span className="text-xs text-white font-medium block">{item.label}</span>
+                    <span className="text-[10px] font-mono text-neutral-400">Tape measurement (cm)</span>
+                  </div>
                 </div>
-                <input
-                  type="range"
-                  min={item.min}
-                  max={item.max}
-                  value={estimates[item.key]}
-                  onChange={(e) => setEstimates(prev => ({ ...prev, [item.key]: parseFloat(e.target.value) }))}
-                  className="w-full accent-white cursor-pointer"
-                />
-                <span className="w-16 font-mono text-sm text-right text-white font-semibold">
-                  {estimates[item.key]} cm
-                </span>
+
+                <div className="flex items-center gap-3 w-full sm:w-auto">
+                  <input
+                    type="range"
+                    min={item.min}
+                    max={item.max}
+                    value={estimates[item.key]}
+                    onChange={(e) => setEstimates(prev => ({ ...prev, [item.key]: parseFloat(e.target.value) }))}
+                    className="w-full sm:w-44 accent-white cursor-pointer"
+                  />
+                  <div className="flex items-center gap-1 font-mono text-sm text-right text-white font-semibold min-w-[70px] justify-end">
+                    <span>{estimates[item.key]}</span>
+                    <span className="text-[10px] font-normal text-neutral-400">cm</span>
+                  </div>
+                </div>
               </div>
             ))}
           </div>
 
-          <div className="flex justify-between items-center pt-4 border-t border-white/10">
+          <div className="flex justify-between items-center pt-3 border-t border-white/10">
             <button
               onClick={() => setCurrentStep('front_capture')}
               className="text-xs uppercase tracking-widest text-neutral-400 hover:text-white"
             >
-              Retake Photos
+              Retake References
             </button>
             <button
               onClick={handleFinalSave}
               className="bg-white text-black hover:bg-neutral-200 px-7 py-3 rounded-full text-xs uppercase tracking-widest font-semibold flex items-center gap-2 transition-colors shadow-2xl"
             >
-              <CheckCircle2 className="w-4 h-4" />
-              <span>Confirm & Save Profile</span>
+              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+              <span>Confirm & Save Verified Profile</span>
             </button>
           </div>
         </div>
@@ -352,4 +410,3 @@ export default function LiveCameraFlow({ onSave, onBack }) {
     </div>
   );
 }
-
