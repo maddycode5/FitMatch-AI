@@ -3,10 +3,11 @@ import { motion } from 'framer-motion';
 import { ShieldCheck, Sparkles, ArrowDownRight, ExternalLink } from 'lucide-react';
 
 export default function FloatingProductCards({ customerProfile, onOpenFitFinder }) {
-  const shoulderVal = customerProfile?.measurements?.shoulder_cm || 45.0;
-  const chestVal = customerProfile?.measurements?.chest_cm || 98.0;
+  const isCalibrated = Boolean(customerProfile?.measurements?.chest_cm);
+  const shoulderVal = customerProfile?.measurements?.shoulder_cm;
+  const chestVal = customerProfile?.measurements?.chest_cm;
   const baseGarmentChest = 108.0;
-  const chestEase = (baseGarmentChest - chestVal).toFixed(1);
+  const chestEase = chestVal ? (baseGarmentChest - chestVal).toFixed(1) : null;
 
   const scrollToAtelier = () => {
     const el = document.getElementById('studio-3d');
@@ -73,20 +74,28 @@ export default function FloatingProductCards({ customerProfile, onOpenFitFinder 
           <div>
             <div className="flex justify-between items-center mb-1">
               <span className="text-neutral-400">Shoulder Width</span>
-              <span className="font-mono text-cyan-300 font-medium">{shoulderVal} cm (Exact)</span>
+              <span className="font-mono text-cyan-300 font-medium">
+                {shoulderVal ? `${shoulderVal} cm (Exact)` : 'Uncalibrated (—)'}
+              </span>
             </div>
             <div className="w-full bg-neutral-800/80 h-1.5 rounded-full overflow-hidden p-0.5 border border-white/5">
-              <div className="bg-gradient-to-r from-cyan-400 to-emerald-400 h-full w-[96%] rounded-full" />
+              <div className={`bg-gradient-to-r from-cyan-400 to-emerald-400 h-full rounded-full ${
+                shoulderVal ? 'w-[96%]' : 'w-[15%]'
+              }`} />
             </div>
           </div>
 
           <div>
             <div className="flex justify-between items-center mb-1">
               <span className="text-neutral-400">Chest Drape Ease</span>
-              <span className="font-mono text-white font-medium">+{chestEase} cm (Tailored)</span>
+              <span className="font-mono text-white font-medium">
+                {chestEase ? `+${chestEase} cm (Tailored)` : 'Pending Calibration'}
+              </span>
             </div>
             <div className="w-full bg-neutral-800/80 h-1.5 rounded-full overflow-hidden p-0.5 border border-white/5">
-              <div className="bg-gradient-to-r from-blue-400 to-cyan-300 h-full w-[92%] rounded-full" />
+              <div className={`bg-gradient-to-r from-blue-400 to-cyan-300 h-full rounded-full ${
+                chestEase ? 'w-[92%]' : 'w-[15%]'
+              }`} />
             </div>
           </div>
         </div>

@@ -17,6 +17,7 @@ import {
 export default function ProductStudio3D({
   customerProfile,
   onOpenFitFinder,
+  onLoadDemoProfile,
   selectedProductIndex: externalProductIndex,
   onSelectProduct: externalSelectProduct
 }) {
@@ -188,12 +189,14 @@ export default function ProductStudio3D({
                   className={`px-3 py-1.5 rounded-full text-[11px] font-mono tracking-wider flex items-center gap-1.5 transition-all border ${
                     wearGarment
                       ? 'bg-cyan-950/90 text-cyan-300 border-cyan-400/80 shadow-[0_0_15px_rgba(0,240,255,0.35)] ring-1 ring-cyan-400/40 font-semibold'
-                      : 'bg-neutral-900/95 text-white border-white/30 hover:border-cyan-400 hover:text-cyan-300 shadow-md font-medium'
+                      : 'bg-neutral-900/90 text-neutral-300 border-white/20 hover:text-white hover:border-white/40 font-medium'
                   }`}
                   title="Toggle Real Archive Garment Draping vs Pure Biometric Scan"
                 >
-                  <Shirt className={`w-3.5 h-3.5 ${wearGarment ? 'text-cyan-400' : 'text-neutral-300'}`} />
-                  <span>{wearGarment ? 'Draped' : 'Naked Scan'}</span>
+                  <Shirt className={`w-3.5 h-3.5 ${wearGarment ? 'text-cyan-400' : 'text-neutral-400'}`} />
+                  <span className={wearGarment ? 'text-cyan-300 font-semibold' : 'text-neutral-300 font-medium'}>
+                    {wearGarment ? 'Draped' : 'Naked Scan'}
+                  </span>
                 </button>
 
                 {/* Fit Measurement Bands Toggle */}
@@ -294,42 +297,110 @@ export default function ProductStudio3D({
                 {/* Score Pill (Updates with selected size) */}
                 <div className="text-right">
                   <div className="font-serif text-3xl sm:text-4xl font-semibold text-white">
-                    {activeEvaluation.fit_score ?? fitResult.fit_score}%
+                    {Boolean(customerProfile?.measurements?.chest_cm) ? `${activeEvaluation.fit_score ?? fitResult.fit_score}%` : '—%'}
                   </div>
-                  <span className="text-[10px] font-mono uppercase text-emerald-400 tracking-wider font-semibold">
-                    {fitResult.confidence} Confidence
+                  <span className={`text-[10px] font-mono uppercase tracking-wider font-semibold ${
+                    Boolean(customerProfile?.measurements?.chest_cm) ? 'text-emerald-400' : 'text-neutral-500'
+                  }`}>
+                    {Boolean(customerProfile?.measurements?.chest_cm) ? `${fitResult.confidence} Confidence` : 'Uncalibrated'}
                   </span>
                 </div>
               </div>
 
-              {/* Recommended Size Display Box */}
-              <div className="p-4 sm:p-5 rounded-2xl bg-white text-black flex items-center justify-between shadow-xl">
-                <div>
-                  <span className="text-[10px] font-mono uppercase tracking-widest text-neutral-600 block">
-                    Ideal Size For Your Body
-                  </span>
-                  <span className="font-serif text-3xl sm:text-4xl font-bold tracking-tight">
-                    Size {recommendedSize}
-                  </span>
-                </div>
-                
-                {fitResult.alternative_size && (
-                  <div className="text-right border-l border-neutral-300 pl-4 sm:pl-6">
-                    <span className="text-[10px] font-mono uppercase text-neutral-500 block">
-                      Alternative
-                    </span>
-                    <span className="font-serif text-lg sm:text-xl font-semibold text-neutral-800">
-                      Size {fitResult.alternative_size}
+              {/* Uncalibrated Guest Alert Box vs Verified / Demo Recommendation */}
+              {!Boolean(customerProfile?.measurements?.chest_cm) ? (
+                <div className="p-5 rounded-2xl bg-cyan-950/40 border border-cyan-400/40 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
+                    <span className="text-xs font-mono uppercase tracking-wider text-cyan-300 font-semibold">
+                      Body Profile Not Yet Calibrated
                     </span>
                   </div>
-                )}
-              </div>
+                  <p className="text-xs text-neutral-300 leading-relaxed font-light">
+                    FitMatch AI computes deterministic ease clearances from your actual physical tape measurements. Provide your measurements using Voice or Manual entry to unlock your verified size.
+                  </p>
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <button
+                      onClick={onOpenFitFinder}
+                      className="bg-white text-black hover:bg-neutral-200 px-4 py-2 rounded-full text-xs uppercase tracking-wider font-semibold flex items-center gap-1.5 transition-all shadow-md"
+                    >
+                      <SlidersHorizontal className="w-3.5 h-3.5" />
+                      <span>Calibrate Measurements</span>
+                    </button>
+                    {onLoadDemoProfile && (
+                      <button
+                        onClick={onLoadDemoProfile}
+                        className="glass-panel text-cyan-300 hover:text-white px-4 py-2 rounded-full text-xs font-mono flex items-center gap-1.5 transition-all"
+                        title="Load pre-calibrated sample 42R archetype for immediate demonstration"
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+                        <span>Load Demo Profile (42R)</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {customerProfile?.is_demo && (
+                    <div className="p-2.5 rounded-xl bg-amber-950/40 border border-amber-500/30 flex items-center justify-between text-xs text-amber-200">
+                      <span className="flex items-center gap-1.5 font-mono text-[11px]">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                        <span>Demo Profile Active (Size 42R Archetype)</span>
+                      </span>
+                      <button
+                        onClick={onOpenFitFinder}
+                        className="text-amber-300 hover:underline text-[10px] font-mono"
+                      >
+                        Enter Real Measurements →
+                      </button>
+                    </div>
+                  )}
 
-              {/* Deterministic Explanation */}
-              <div className="p-4 rounded-xl bg-neutral-900/60 border border-white/5 text-xs text-neutral-300 leading-relaxed font-light">
-                <span className="text-white font-medium">Why this size? </span>
-                {fitResult.explanation}
-              </div>
+                  {customerProfile?.measurement_metadata?.verified_by_user && !customerProfile?.is_demo && (
+                    <div className="p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-500/30 flex items-center justify-between text-xs text-emerald-200">
+                      <span className="flex items-center gap-1.5 font-mono text-[11px]">
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Verified Customer Profile Active</span>
+                      </span>
+                      <button
+                        onClick={onOpenFitFinder}
+                        className="text-emerald-300 hover:underline text-[10px] font-mono"
+                      >
+                        Edit Profile →
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Recommended Size Display Box */}
+                  <div className="p-4 sm:p-5 rounded-2xl bg-white text-black flex items-center justify-between shadow-xl">
+                    <div>
+                      <span className="text-[10px] font-mono uppercase tracking-widest text-neutral-600 block">
+                        Ideal Size For Your Body
+                      </span>
+                      <span className="font-serif text-3xl sm:text-4xl font-bold tracking-tight">
+                        Size {recommendedSize}
+                      </span>
+                    </div>
+                    
+                    {fitResult.alternative_size && (
+                      <div className="text-right border-l border-neutral-300 pl-4 sm:pl-6">
+                        <span className="text-[10px] font-mono uppercase text-neutral-500 block">
+                          Alternative
+                        </span>
+                        <span className="font-serif text-lg sm:text-xl font-semibold text-neutral-800">
+                          Size {fitResult.alternative_size}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Deterministic Explanation */}
+                  <div className="p-4 rounded-xl bg-neutral-900/60 border border-white/5 text-xs text-neutral-300 leading-relaxed font-light">
+                    <span className="text-white font-medium">Why this size? </span>
+                    {fitResult.explanation}
+                  </div>
+                </>
+              )}
 
               {/* Size Chart Interactive Selector */}
               <div>

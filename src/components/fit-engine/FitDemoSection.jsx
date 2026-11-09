@@ -77,10 +77,11 @@ export default function FitDemoSection({
     });
   }, [customerProfile, activeProduct]);
 
-  const recommendedSize = fitResult.recommended_size || activeProduct.size_chart[0].size;
-  const avatarId = customerProfile?.profile_id || 'AVATAR-#FIT-9021';
-  const chestVal = customerProfile?.measurements?.chest_cm || 98;
-  const waistVal = customerProfile?.measurements?.waist_cm || 82;
+  const isCalibrated = Boolean(customerProfile?.measurements?.chest_cm);
+  const recommendedSize = fitResult.recommended_size || (isCalibrated ? activeProduct.size_chart[0].size : '—');
+  const avatarId = customerProfile?.profile_id || (isCalibrated ? 'AVATAR-#FIT-9021' : 'GUEST-UNCALIBRATED');
+  const chestVal = customerProfile?.measurements?.chest_cm;
+  const waistVal = customerProfile?.measurements?.waist_cm;
 
   const handleApplyFit = () => {
     setApplied(true);
@@ -157,11 +158,15 @@ export default function FitDemoSection({
             <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 space-y-2 font-mono text-[11px]">
               <div className="flex justify-between text-neutral-400 border-b border-white/5 pb-1.5">
                 <span>Calibrated Chest:</span>
-                <span className="text-white font-semibold">{chestVal} cm</span>
+                <span className={isCalibrated ? 'text-white font-semibold' : 'text-neutral-500 italic'}>
+                  {isCalibrated ? `${chestVal} cm` : 'Pending'}
+                </span>
               </div>
               <div className="flex justify-between text-neutral-400 border-b border-white/5 pb-1.5">
                 <span>Calibrated Waist:</span>
-                <span className="text-white font-semibold">{waistVal} cm</span>
+                <span className={isCalibrated ? 'text-white font-semibold' : 'text-neutral-500 italic'}>
+                  {isCalibrated ? `${waistVal} cm` : 'Pending'}
+                </span>
               </div>
               <div className="flex justify-between text-neutral-400">
                 <span>Drape Silhouette:</span>
@@ -187,9 +192,17 @@ export default function FitDemoSection({
                     PROFILE: <span className="text-cyan-400">{avatarId}</span> • TESTING: <span className="text-white font-semibold">{activeProduct.product_name.split('&')[0].trim()}</span>
                   </p>
                 </div>
-                <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-950/80 border border-emerald-500/40">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                  <span className="text-xs font-mono text-emerald-400 tracking-wider uppercase font-semibold">Live Calibrated</span>
+                <div className={`flex items-center gap-2 px-3 py-1 rounded-full border ${
+                  isCalibrated 
+                    ? 'bg-emerald-950/80 border-emerald-500/40' 
+                    : 'bg-cyan-950/80 border-cyan-500/40'
+                }`}>
+                  <span className={`w-2 h-2 rounded-full ${isCalibrated ? 'bg-emerald-400 animate-pulse' : 'bg-cyan-400'}`} />
+                  <span className={`text-xs font-mono tracking-wider uppercase font-semibold ${
+                    isCalibrated ? 'text-emerald-400' : 'text-cyan-300'
+                  }`}>
+                    {isCalibrated ? (customerProfile?.is_demo ? 'Demo 42R' : 'Live Calibrated') : 'Pending Calibration'}
+                  </span>
                 </div>
               </div>
 
