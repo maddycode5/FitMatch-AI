@@ -4,12 +4,13 @@
 
 ![FitMatch AI Hero](https://images.unsplash.com/photo-1507679799987-c73779587ccf?auto=format&fit=crop&w=1200&q=80)
 
-**Precision apparel fit, deterministic ease calculations, and real-time 3D holographic wardrobe try-on.**
+**Precision apparel fit, deterministic ease calculations, category-aware dimension scoring, and real-time 3D holographic wardrobe try-on.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-black.svg?style=flat-square)](#)
 [![React 18](https://img.shields.io/badge/React-18.3-00f0ff?style=flat-square&logo=react)](#)
 [![Three.js](https://img.shields.io/badge/Three.js-r164-black?style=flat-square&logo=three.js)](#)
 [![React Three Fiber](https://img.shields.io/badge/@react--three/fiber-v8-blue?style=flat-square)](#)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.111-009688?style=flat-square&logo=fastapi)](#)
 [![Tailwind CSS](https://img.shields.io/badge/TailwindCSS-v3.4-38bdf8?style=flat-square&logo=tailwind-css)](#)
 [![Vite](https://img.shields.io/badge/Vite-v5.4-646CFF?style=flat-square&logo=vite)](#)
 
@@ -32,72 +33,99 @@ The platform couples a **deterministic category-aware sizing algorithm** with a 
 ## Core Features & Capabilities
 
 ### 1. Multi-Modal Universal Body Ingestion
-FitMatch AI establishes a single, universal customer measurement profile persisted across all brands:
-* **Mode 1: Hands-Free Voice Assistant (Secure FastAPI Proxy + Gnani Prisma STT & Timbre TTS)**
-  * **Zero Client Secrets Architecture:** React Frontend contains zero API keys. All audio processing and credentials are securely proxied via FastAPI (`http://localhost:8000`).
-  * **Gnani Prisma Speech Recognition (STT):** Continuous speech recognition streaming calibrated for Indian English (`en-IN`), Hindi, and Hinglish.
-  * **Gnani Timbre & Voice Cloning (TTS):** Direct cloud neural voice pipeline with custom voice clone persona support and automatic local browser speech fallback.
-  * **Multi-Measurement Spoken Extraction:** Recognizes compound sentences (e.g., *"My chest is 98 centimetres and my waist is 82 centimetres"*), splits clauses, converts units, and validates against physiological anthropometric bounds.
-  * **Spoken Confirmation Workflow:** Synthesizes voice confirmation prompt (*"Your Chest is 98 centimetres and Waist is 82 centimetres. Is that correct?"*) before values are committed to the user's profile.
-  * **Intelligent Multi-Key Credit Rotation (`GnaniFallbackManager`):** Rotates between Primary, Secondary Fallback, and Tertiary Backup API keys strictly on true quota exhaustion (HTTP 402, 429, 403), with cautious error handling and zero redundant charging on timeouts.
+
+FitMatch AI establishes a single, universal customer measurement profile without pre-populated fake measurements:
+
+* **Clean First-Time Profile & Demo Archetype Separation:**
+  * **Empty Initial Profile (`EMPTY_USER_PROFILE`):** First-time visitors start completely clean with all dimensions set to `null` and `verified_by_user: false`. Sizing recommendations and 99.4% confidence guarantees are strictly withheld until the user calibrates their physical dimensions.
+  * **Interactive Placeholders:** Input fields display realistic target ranges as light placeholders (*e.g., `e.g. 98 cm`, `e.g. 82 cm`*) rather than pre-filling form values.
+  * **Dedicated Demo Archetype (`DEMO_USER_PROFILE`):** Evaluators and reviewers can click `⚡ Load Demo Profile (42R)` in the 3D customizer, manual form, or modal footer to immediately test sizing recommendations on a benchmark 42R morphology without confounding verified biometrics.
+
+* **Mode 1: Hands-Free Voice Assistant (Dual-Tier Speech Pipeline + Gnani Cloud)**
+  * **Zero Client Secrets Architecture:** React Frontend contains zero private API keys. All audio processing and credentials are securely proxied via FastAPI (`http://localhost:8000`).
+  * **Real Audio Capture & Gnani Prisma STT:** Employs an in-browser `AudioRecorder` capturing high-fidelity `audio/wav` microphone buffers transmitted directly to `POST /api/voice/stt` (Gnani Prisma STT proxy).
+  * **Dual-Tier Live Mode:** Uses browser Web Speech recognition for instantaneous interim speech previews while streaming the actual audio buffer payload to Gnani Prisma STT for final transcription.
+  * **Gnani Timbre Neural TTS:** Conversational voice pipeline with tailored audio guidance and automatic local browser speech fallback.
+  * **Multi-Measurement Spoken Extraction:** Recognizes compound sentences (*e.g., "My chest is 98 centimetres, waist is 82 centimetres, and inseam is 80"*), splits clauses, converts imperial/metric units, and validates across physiological anthropometric bounds.
+  * **Comprehensive Body Dimensions:** Supports voice extraction for Chest, Shoulders, Neck, Arm/Sleeve Length, Waistline, Hips, Thigh Circumference, and Inseam in English, Hindi, and Hinglish (*"chhati"*, *"seena"*, *"kamar"*, *"gala"*, *"baanh"*, *"jaangh"*, *"taang"*).
   * **Interactive Anatomical HUD:** SVG body silhouette with dynamic laser highlight bands illuminating each active measurement zone.
+
 * **Mode 2: Guided Manual Tape Entry**
-  * Step-by-step visual placement guides for Chest, Waist, Hips, Shoulders, Inseam, Neck, and Sleeve length.
+  * Step-by-step visual placement guides for Chest, Waist, Hips, Shoulders, Neck, Arm/Sleeve length, Thigh, and Inseam.
   * Instant metric ($\text{cm}$) / imperial ($\text{inches}$) conversion.
   * Strict physiological validation bounds (rejecting anatomically impossible inputs).
-* **Mode 3: Real-Time WebCam Silhouette Scanner**
-  * Direct browser camera stream with holographic A-pose alignment guide.
-  * 3-second capture countdown with motion stability checks.
-  * Calibrated computer vision estimations with fine-tuning micro-sliders.
-* **Mode 4: Dual Photo Upload (Front & Profile)**
-  * Asynchronous front and lateral portrait dropzones.
-  * Automatic aspect ratio, lighting quality, and background contrast checks.
+
+* **Mode 3: Live Camera Posture Reference [🧪 Experimental UI Prototype]**
+  * Direct browser camera stream with holographic A-pose alignment guide and 3-second capture countdown.
+  * Captures front and 90° profile posture reference frames stored 100% locally in-browser.
+  * Disclaims automated 2D circumference calculation and provides guided tape measurement verification paired with Gnani Timbre spoken tailor instructions.
+
+* **Mode 4: Dual Photo Posture Reference [🧪 Experimental UI Prototype]**
+  * Asynchronous front and lateral portrait upload with client-side image format and size validation.
+  * Displays proportion reference thumbnails alongside guided manual tape measurement verification with Gnani voice assistance.
 
 ---
 
 ### 2. Deterministic Category-Aware Fit Engine
+
 Unlike opaque black-box recommendations, FitMatch AI utilizes transparent biomechanical ease formulas:
 
-* **Category Ease Targets:** Distinct bespoke tolerances for Tailored Suits & Blazers ($\sim +10\text{ to }+16\text{ cm}$), Dress Shirts ($\sim +6\text{ to }+10\text{ cm}$), Minimalist Trousers ($\sim +2\text{ to }+5\text{ cm}$), and Overcoats ($\sim +14\text{ to }+20\text{ cm}$).
-* **Customer Fit Preferences:** Dynamically adjusts scoring curves between **Slim** (close-to-body contour), **Regular** (tailored balance), and **Oversized** (relaxed architectural drape).
-* **Asymmetric Penalty Function:** Tightness ($\text{Ease} < \text{Target}$) is penalized **$1.8\times$ more severely** than excess room to prevent unwearable constriction.
+* **Comprehensive Category Dimension Matrices:**
+  Every category scores all declared dimensions with normalized weights summing to $1.00$:
+  * **Jeans & Trousers (`jeans`):** Multi-point scoring across **Waist Circumference** (weight: 0.45), **Hip Clearance** (0.30), **Thigh Ease** (0.15, $\sim +2\text{ to }+4.5\text{ cm}$), and **Inseam Leg Break** (0.10, $\sim 0\text{ to }+2\text{ cm}$).
+  * **Tailored Shirts (`shirt`):** Evaluates **Chest Ease** (0.40), **Shoulder Width** (0.30), **Collar/Neck Comfort** (0.15, $\sim +1.5\text{ to }+3.5\text{ cm}$ buttoned closure), and **Sleeve Cuff Alignment** (0.15, $\sim +1.5\text{ to }+4.5\text{ cm}$).
+  * **Jackets & Outerwear (`jacket`):** Scores structured **Chest Ease** (0.45) over canvassing, **Shoulder Articulation** (0.35), and **Tailored Sleeve Length** (0.20, $\sim +3\text{ to }+6\text{ cm}$).
+  * **T-Shirts & Tops (`tshirt`):** Evaluates **Chest Room** (0.50), **Shoulder Seam Alignment** (0.35), and **Torso Drape Length** (0.15, benchmarked against $41\%$ of standing height).
+  * **Dresses (`dress`):** Evaluates **Chest Ease** (0.35), **Waistline Ease** (0.35), and **Hip Drape** (0.30).
+
+* **Precise Fabric Stretch Offset:**
+  * Fixed stretch factor lookup (`STRETCH_OFFSETS[stretchKey]`) resolving JavaScript's `0`-falsy coercion bug.
+  * Rigid textiles (`none`) strictly evaluate to **`0.0 cm`** offset without artificial ease injection.
+  * Low stretch evaluates to $+1.2\text{ cm}$, medium to $+2.8\text{ cm}$, and high elastane to $+5.0\text{ cm}$.
+
+* **Category-Specific Deterministic Explanations:**
+  * *Trousers:* "Size 32 delivers +4.2cm waist comfort with +5.5cm thigh ease and +3cm inseam break for a tailored regular trouser drape."
+  * *Shirts:* "Size 42 (L) provides +16.6cm chest ease with +3cm collar comfort and +3cm sleeve cuff alignment for a bespoke shirt silhouette."
+  * *Jackets:* "Size 42R (L) delivers +16cm chest ease and +2.5cm tailored sleeve length over suit canvassing for an architectural outerwear drape."
+  * *T-Shirts:* "Size M gives +9.4cm chest room and +1cm torso drape length in pure cotton drape."
+
+* **Asymmetric Penalty Function:** Tightness ($\text{Ease} < \text{Target}$) is penalized **$1.8\times$ to $2.5\times$ more severely** than excess room to prevent unwearable constriction.
 * **Critical Minimum Boundary Checks:** Flags dealbreakers where a garment will physically fail to button, zip, or restrict shoulder articulation.
 * **Biomechanical Tension Stress Mapping:** Generates tension indexes normalized between $-1.0$ (critical pinch) and $+1.0$ (excess loose).
-* **Live Dynamic Dimension Breakdown:** Real-time updates showing exact ease clearances (*e.g., "Chest: +10.6 cm ease (Optimal) • Shoulders: 45.0 cm (Exact match)"*).
+* **Live Dynamic Dimension Breakdown:** Real-time updates showing exact ease clearances (*e.g., "Waist: +4.2 cm ease • Thigh: +5.5 cm • Inseam: +3.0 cm"*).
 
 ---
 
 ### 3. Real-Time 3D Biometric Hologram & Virtual Archive Draping
+
 Rendered via Three.js and `@react-three/fiber` inside a cinematic obsidian cyber-pod:
 
 * **Full-Body Biometric Avatar:**
   * Procedurally sculpted anatomical cranium, neck, torso, arms, hands, legs, and feet.
-  * Glowing cyan neural constellation wireframe network.
-  * 14 glowing anatomical landmark nodes tracking joint pivots.
-  * Dual radiant energy cores: volumetric pulsing upper chest/heart and solar plexus/navel hubs.
-* **Cylindrical Laser Scanner Pod:**
-  * 22 vertical holographic laser stream rods with double emitter rings.
-  * Sweeping planar horizontal scan disc continuously calibrating the avatar.
-  * Concentric floor dais with soft cyan contact shadows.
+  * Glowing cyan neural constellation wireframe network with 14 anatomical landmark joint nodes.
+  * Optimal default camera framing (`fov: 38`, `position: [0, 0.4, 9.2]`) ensuring complete head-to-toe mannequin visibility with $+15\text{--}20\%$ margin.
+* **High-Contrast Wardrobe Controls:**
+  * **"Draped" / "Naked Scan" Toggle:** Distinct high-contrast styling with glowing cyan text (`text-cyan-300`), icon (`text-cyan-400`), border, and ambient shadow when draped; crisp high-contrast neutral pill when in pure biometric scan mode.
+  * **Holographic Fit Bands:** Caliper laser rings at Chest, Waist, and Hips measuring garment clearance in centimeters.
+  * **Biomechanical Tension Heatmap Overlay:**
+    * 🟢 **Emerald Green:** Optimal Ease (target bespoke comfort).
+    * 🔴 **Crimson Red:** Strained Fit ($<0\text{ cm}$ tight constriction/pinch).
+    * 🟡 **Amber Yellow:** Snug tailored contour.
+    * 🔵 **Cyan Blue:** Loose oversized drape.
 * **Photorealistic Virtual Archive Garments (True 3D Tailored Apparel):**
   * **Monochrome Cashmere Blazer & 3-Piece Suit:** Check wool houndstooth/tweed procedural weave, 3D peaked lapels, tailored waistcoat, striped silk necktie with knot and blade, folded crisp white linen pocket square, tailored sleeves with cuffs, and matching suit trousers.
   * **Sculptural Asymmetric Drape Shirt:** Crisp Egyptian white cotton with natural fabric folds, 3D spread collar wings, 3D navy silk tie with white polka dots, long sleeves with buttoned wrist cuffs, tucked into tailored trousers.
   * **Pleated Minimalist Pantalon:** High-waisted tailored waistband with belt loops and silver clasp button, architectural wide-leg drape with sharp vertical pinstripes and front pleat creases breaking over the shoes.
   * **The Sculptural Minimalist Trench:** Double-breasted twill overcoat with broad storm flap lapels, horn buttons, 3D waist belt with brass buckle, and long overcoat sleeves with wrist adjustment straps.
 * **Procedural PBR CanvasTextile Engine (`RealGarmentTextures.js`):**
-  * High-definition 1024×1024 procedural textures generating houndstooth check wool, pinstripes, twill weaves, silk ties, and buttons.
-  * Correct UV alignment with forward-facing orientation (`rotation={[0, Math.PI, 0]}`).
-* **Holographic Fit Bands:**
-  * Caliper laser rings at Chest, Waist, and Hips measuring garment clearance in centimeters.
-* **Biomechanical Tension Heatmap Overlay:**
-  * 🟢 **Emerald Green:** Optimal Ease (target bespoke comfort).
-  * 🔴 **Crimson Red:** Strained Fit ($<0\text{ cm}$ tight constriction/pinch).
-  * 🟡 **Amber Yellow:** Snug tailored contour.
-  * 🔵 **Cyan Blue:** Loose oversized drape.
+  * High-definition 1024×1024 procedural textures generating houndstooth check wool, pinstripes, twill weaves, silk ties, and buttons with forward-facing UV alignment (`rotation={[0, Math.PI, 0]}`).
 
 ---
 
 ### 4. Interactive Volumetric 3D Atelier Workspace
+
+* **Uncalibrated Guest Protection:** Uncalibrated profiles display a clear `"Body Profile Not Yet Calibrated"` notification with quick-action buttons to enter measurements or test with the 42R demo archetype.
+* **Active Profile Status Banners:** Visual amber indicators for Demo Mode and emerald badges for verified customer profiles.
 * **Full-Width Top Header:** Title and descriptive subtitle span from left to right.
 * **4-Column Virtual Archive Recommendation Grid:** Clickable garment cards placed directly below the header with thumbnail images, match scores, prices, and unclipped text.
 * **50/50 Balanced Proportional Layout:** Equal-width frames with the 3D viewport stretching vertically to match the live telemetry panel.
@@ -106,18 +134,13 @@ Rendered via Three.js and `@react-three/fiber` inside a cinematic obsidian cyber
 ---
 
 ### 5. Biomechanical Cloth Physics & Drape Simulator (`FitDemoSection.jsx`)
+
 * **Real-Time Textile Simulation:** Switch between **Raw Cashmere (380 GSM)**, **Mulberry Silk (120 GSM)**, and **Super 150s Wool (290 GSM)**.
 * **Dynamic Physical Indicators:**
   * **Torso Compression & Tension (MPa):** Live tensile strain across the torso.
   * **Sleeve Articulation Range (°):** Arm-raise mobility and seam stress.
   * **Thermal Clo Index:** Microclimate breathability and luxury insulation.
-* **"Apply Fit To Atelier" Action:** Smoothly applies the selected drape physics to the 3D model.
-
----
-
-### 6. Interactive Hero HUD Telemetry (`FloatingProductCards.jsx`)
-* **Docked Interactive Overlays:** Clickable cards displaying real-time shoulder bone alignment, chest drape ease, and zero-return-risk confidence score.
-* **Direct 3D Navigation:** Clicking either floating card smoothly navigates directly to the 3D Atelier.
+* **Uncalibrated Telemetry State:** Displays clean `"Pending Calibration"` indicators rather than falling back to unverified measurements.
 
 ---
 
@@ -130,6 +153,21 @@ FitMatch AI/
 ├── tailwind.config.js           # Custom luxury dark-mode theme & glassmorphic utilities
 ├── postcss.config.js            # PostCSS plugin configurations
 ├── .gitignore                   # Production repository exclusions
+│
+├── backend/                     # Secure FastAPI Voice & Biometric Proxy
+│   ├── requirements.txt         # FastAPI, Uvicorn, httpx, pydantic dependencies
+│   ├── .env.example             # Template for GNANI_API_KEY, GNANI_TOKEN, lang codes
+│   └── app/
+│       ├── main.py              # FastAPI application factory & CORS configuration
+│       ├── config.py            # Environment configuration & credential validation
+│       ├── routes/
+│       │   └── voice.py         # /api/voice/stt, /api/voice/tts, /api/voice/extract
+│       └── services/
+│           ├── gnani_stt.py     # Gnani Prisma STT proxy
+│           ├── gnani_tts.py     # Gnani Timbre TTS proxy & voice cloning
+│           ├── fallback_manager.py # Multi-key credit exhaustion listener
+│           └── measurement_extractor.py # Biometric numerical parser & bounds validator
+│
 └── src/
     ├── main.jsx                 # React root mount
     ├── App.jsx                  # Master application orchestrator & local storage sync
@@ -139,8 +177,11 @@ FitMatch AI/
     │   └── products.js          # The Virtual Archive physical garment specifications
     │
     ├── engine/
-    │   ├── types.js             # Physiological bounds, category ease matrices, & schemas
+    │   ├── types.js             # Bounds, categories, EMPTY_USER_PROFILE, DEMO_USER_PROFILE
     │   └── fitEngine.js         # Deterministic category-aware sizing algorithm & tension map
+    │
+    ├── services/
+    │   └── voiceMeasurementService.js # Frontend speech recording & Gnani backend connector
     │
     └── components/
         ├── 3d/
@@ -148,8 +189,7 @@ FitMatch AI/
         │   ├── RealGarmentTextures.js     # High-definition procedural PBR textile generators
         │   ├── ParametricMannequin.jsx    # R3F canvas, cyber lights, & OrbitControls
         │   ├── GarmentHeroScene.jsx       # Hero 3D turntable scene
-        │   ├── CyberAvatarModel.jsx       # Standalone biometric avatar module
-        │   └── SplineViewer.jsx           # Spline scene embed fallback
+        │   └── CyberAvatarModel.jsx       # Standalone biometric avatar module
         │
         ├── common/
         │   └── Navbar.jsx                 # Luxury glassmorphic navigation header
@@ -160,12 +200,10 @@ FitMatch AI/
         │
         ├── onboarding/
         │   ├── FitFinderModal.jsx         # Master multi-modal onboarding modal
+        │   ├── VoiceMeasurementFlow.jsx   # Microphone capture & voice guidance
         │   ├── ManualMeasurementFlow.jsx  # Interactive tape measurement entry
-        │   ├── LiveCameraFlow.jsx         # WebCam stream & pose silhouette alignment
-        │   └── PhotoUploadFlow.jsx        # Dual-angle photo quality analyzer
-        │
-        ├── showcase/
-        │   └── LuxuryGrid.jsx             # Interactive luxury wardrobe archive
+        │   ├── LiveCameraFlow.jsx         # Camera stream & guided tape measurement
+        │   └── PhotoUploadFlow.jsx        # Dual-angle photo reference & guided tape entry
         │
         ├── fit-engine/
         │   └── FitDemoSection.jsx         # Live interactive cloth physics simulator
@@ -183,7 +221,7 @@ FitMatch AI/
 | :--- | :--- | :--- |
 | **Frontend Framework** | **React 18** | Concurrent rendering, state persistence, modular architecture |
 | **Backend Proxy** | **FastAPI (Python 3.10+)** | High-performance asynchronous API proxy, failover & validation |
-| **Voice AI Engine** | **Gnani Prisma & Timbre** | Continuous STT recognition, neural TTS synthesis & voice cloning |
+| **Voice AI Engine** | **Gnani Prisma & Timbre** | Real microphone audio buffer STT, neural TTS synthesis & voice cloning |
 | **3D Rendering** | **Three.js** | WebGL graphics, custom procedural spline lathes, PBR materials |
 | **3D React Bridge** | **@react-three/fiber** | Declarative Three.js scene graph inside React components |
 | **3D Utilities** | **@react-three/drei** | `OrbitControls`, `Float`, `ContactShadows`, procedural lighting |
@@ -210,7 +248,7 @@ pip install -r requirements.txt
 
 # Configure backend environment variables
 cp .env.example .env
-# Fill in GNANI_ACCESS_KEY, GNANI_TOKEN, etc.
+# Fill in your GNANI_API_KEY, GNANI_TOKEN, GNANI_LANG_CODE, etc.
 
 # Start FastAPI voice proxy server
 python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
@@ -243,26 +281,29 @@ The production bundle generates in `dist/`. Client scripts are completely free o
 
 ```mermaid
 flowchart TD
-    A["Customer Visits Platform"] --> B{"Has Universal Profile?"}
-    B -- No --> C["Launch Fit Finder Modal"]
-    C --> D1["Mode 1: Voice Measurement Mode"]
-    C --> D2["Mode 2: Manual Tape Entry"]
-    C --> D3["Mode 3: WebCam Pose Scanner"]
-    C --> D4["Mode 4: Dual Photo Upload"]
-    D1 --> E["Standardized Body Profile Created"]
-    D2 --> E
-    D3 --> E
-    D4 --> E
-    B -- Yes --> E
-    E --> F["Browse The Virtual Archive"]
-    F --> G["Open Volumetric 3D Customizer Studio"]
-    G --> H["Deterministic Fit Engine Calculates True Ease"]
-    H --> I1["Recommended Size Selected"]
-    H --> I2["Dimension-by-Dimension Breakdown"]
-    H --> I3["Biomechanical Tension Heatmap Projected"]
-    G --> J["Select Archive Garment, Fabric Weave & Fit Preference"]
-    J --> K["Garment Drapes Dynamically Over 3D Biometric Avatar"]
-    K --> L["Add Size to Bag with 0% Brand Guesswork"]
+    A["Customer Visits Platform"] --> B{"Calibrated Profile Exists?"}
+    B -- No --> C["Profile: Uncalibrated Guest"]
+    C --> D{"Select Calibration Mode"}
+    D --> E1["Mode 1: Voice Measurement (Gnani STT/TTS)"]
+    D --> E2["Mode 2: Guided Manual Tape Entry"]
+    D --> E3["Mode 3: Live Camera Posture Reference [Experimental]"]
+    D --> E4["Mode 4: Photo Upload Posture Reference [Experimental]"]
+    D --> E5["⚡ Load Demo Profile (Size 42R Archetype)"]
+    E1 --> F["Standardized Customer Biometric Profile"]
+    E2 --> F
+    E3 --> F
+    E4 --> F
+    E5 --> F
+    B -- Yes --> F
+    F --> G["Browse The Virtual Archive"]
+    G --> H["Open Volumetric 3D Customizer Studio"]
+    H --> I["Deterministic Fit Engine Evaluates Category Dimensions"]
+    I --> J1["Ideal Size Selected with Deterministic Confidence"]
+    I --> J2["Multi-Point Dimension Breakdown (Ease & Status)"]
+    I --> J3["Biomechanical Tension Heatmap Projected"]
+    H --> K["Select Archive Garment, Colorway & Fit Preference"]
+    K --> L["Garment Drapes Dynamically Over 3D Biometric Avatar"]
+    L --> M["Add Size to Bag with 0% Brand Guesswork"]
 ```
 
 ---
