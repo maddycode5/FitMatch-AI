@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Sliders, Camera, Upload, Check, ShieldCheck, Trash2 } from 'lucide-react';
+import { X, Sliders, Camera, Upload, Mic, Check, ShieldCheck, Trash2, Sparkles } from 'lucide-react';
 import ManualMeasurementFlow from './ManualMeasurementFlow';
 import LiveCameraFlow from './LiveCameraFlow';
 import PhotoUploadFlow from './PhotoUploadFlow';
+import VoiceMeasurementFlow from './VoiceMeasurementFlow';
 
 export default function FitFinderModal({
   isOpen,
@@ -12,7 +13,7 @@ export default function FitFinderModal({
   onSaveProfile,
   onDeleteProfile
 }) {
-  const [selectedMethod, setSelectedMethod] = useState(null); // 'manual' | 'camera' | 'photo' | null
+  const [selectedMethod, setSelectedMethod] = useState(null); // 'manual' | 'voice' | 'camera' | 'photo' | null
   const [fitPreference, setFitPreference] = useState(currentProfile?.fit_preferences?.default_fit || 'regular');
   const [stage, setStage] = useState('method_selection'); // 'method_selection' | 'collecting' | 'preference_selection' | 'completed'
 
@@ -56,12 +57,12 @@ export default function FitFinderModal({
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 15 }}
         transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-        className="relative z-10 w-full max-w-3xl glass-panel bg-[#0d0d0f] rounded-3xl border border-white/10 shadow-2xl p-6 sm:p-10 my-8 overflow-hidden"
+        className="relative z-10 w-full max-w-4xl glass-panel bg-[#0d0d0f] rounded-3xl border border-white/10 shadow-2xl p-6 sm:p-10 my-8 overflow-hidden"
       >
         {/* Close Button */}
         <button
           onClick={onClose}
-          className="absolute top-6 right-6 w-9 h-9 rounded-full bg-white/5 border border-white/10 hover:bg-white hover:text-black flex items-center justify-center text-neutral-300 transition-colors"
+          className="absolute top-6 right-6 w-9 h-9 rounded-full bg-white/5 border border-white/10 hover:bg-white hover:text-black flex items-center justify-center text-neutral-300 transition-colors z-20"
         >
           <X className="w-4 h-4" />
         </button>
@@ -70,7 +71,7 @@ export default function FitFinderModal({
         {stage === 'method_selection' && (
           <div className="space-y-8">
             <div className="text-center max-w-xl mx-auto space-y-2">
-              <span className="text-[11px] font-mono uppercase tracking-[0.25em] text-neutral-400">
+              <span className="text-[11px] font-mono uppercase tracking-[0.25em] text-cyan-400">
                 Fit Finder Engine
               </span>
               <h2 className="font-serif text-3xl sm:text-4xl text-white font-normal">
@@ -86,8 +87,34 @@ export default function FitFinderModal({
                 How would you like to provide your body measurements?
               </span>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
-                {/* Method A: Manual */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-2">
+                
+                {/* Method 1: Voice Guided Mode (Gnani Prisma & Timbre) */}
+                <button
+                  onClick={() => {
+                    setSelectedMethod('voice');
+                    setStage('collecting');
+                  }}
+                  className="p-5 rounded-2xl bg-cyan-950/30 border border-cyan-400/50 hover:border-cyan-400 text-left transition-all group flex flex-col justify-between shadow-[0_0_25px_rgba(0,240,255,0.1)] relative overflow-hidden"
+                >
+                  <div className="absolute top-0 right-0 w-16 h-16 bg-cyan-400/10 rounded-bl-full pointer-events-none" />
+                  <div>
+                    <div className="w-10 h-10 rounded-xl bg-cyan-400 text-black flex items-center justify-center mb-3 shadow-lg shadow-cyan-400/30 group-hover:scale-110 transition-transform">
+                      <Mic className="w-5 h-5" />
+                    </div>
+                    <h3 className="font-serif text-base text-white font-medium mb-1 flex items-center gap-1.5">
+                      <span>Voice Assistant</span>
+                    </h3>
+                    <p className="text-xs text-neutral-300 font-light">
+                      Speak measurements hands-free with Gnani Prisma voice recognition & Timbre spoken guidance.
+                    </p>
+                  </div>
+                  <span className="text-[10px] font-mono text-cyan-400 mt-4 block font-semibold">
+                    Hands-Free Voice AI ✦
+                  </span>
+                </button>
+
+                {/* Method 2: Manual Tape Entry */}
                 <button
                   onClick={() => {
                     setSelectedMethod('manual');
@@ -100,18 +127,18 @@ export default function FitFinderModal({
                       <Sliders className="w-5 h-5" />
                     </div>
                     <h3 className="font-serif text-base text-white font-medium mb-1">
-                      Manual Measurement
+                      Manual Tape Entry
                     </h3>
                     <p className="text-xs text-neutral-400 font-light">
                       Enter your tape measurements with our interactive visual placement guide.
                     </p>
                   </div>
                   <span className="text-[10px] font-mono text-emerald-400 mt-4 block">
-                    Highest Reliability
+                    Tailor Precision
                   </span>
                 </button>
 
-                {/* Method B: Live Camera */}
+                {/* Method 3: Live Camera Scan */}
                 <button
                   onClick={() => {
                     setSelectedMethod('camera');
@@ -135,7 +162,7 @@ export default function FitFinderModal({
                   </span>
                 </button>
 
-                {/* Method C: Photo Upload */}
+                {/* Method 4: Photo Upload */}
                 <button
                   onClick={() => {
                     setSelectedMethod('photo');
@@ -158,6 +185,7 @@ export default function FitFinderModal({
                     Calibrated Estimates
                   </span>
                 </button>
+
               </div>
             </div>
 
@@ -165,7 +193,7 @@ export default function FitFinderModal({
             <div className="flex items-center justify-between pt-4 border-t border-white/10 text-xs text-neutral-400">
               <span className="flex items-center gap-1.5 text-neutral-400">
                 <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                Zero third-party telemetry. You own your biometric data.
+                Zero third-party telemetry. Speech recognition captures spoken values; speech does not measure your body.
               </span>
 
               {onDeleteProfile && (
@@ -184,6 +212,13 @@ export default function FitFinderModal({
         {/* STAGE 2: ACTIVE COLLECTION FLOW */}
         {stage === 'collecting' && (
           <div>
+            {selectedMethod === 'voice' && (
+              <VoiceMeasurementFlow
+                initialProfile={currentProfile}
+                onSave={handleProfileDataSaved}
+                onBack={() => setStage('method_selection')}
+              />
+            )}
             {selectedMethod === 'manual' && (
               <ManualMeasurementFlow
                 initialProfile={currentProfile}
@@ -219,78 +254,45 @@ export default function FitFinderModal({
               Fit preferences guide our target ease allowances without altering your true body dimensions.
             </p>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-left">
-              {/* Slim */}
-              <button
-                onClick={() => handleFinalPreferenceSaved('slim')}
-                className={`p-5 rounded-2xl border transition-all ${
-                  fitPreference === 'slim'
-                    ? 'border-white bg-white/10 text-white'
-                    : 'border-white/10 bg-neutral-900/40 text-neutral-400 hover:border-white/20'
-                }`}
-              >
-                <div className="font-serif text-lg font-medium text-white mb-1">Slim Fit</div>
-                <p className="text-xs text-neutral-400 leading-relaxed font-light">
-                  Closer to the body. Minimal extra fabric ease for a contoured silhouette.
-                </p>
-                <span className="text-[10px] font-mono text-neutral-500 mt-4 block">
-                  Target: +4cm to +8cm
-                </span>
-              </button>
-
-              {/* Regular */}
-              <button
-                onClick={() => handleFinalPreferenceSaved('regular')}
-                className={`p-5 rounded-2xl border transition-all ${
-                  fitPreference === 'regular'
-                    ? 'border-white bg-white/10 text-white'
-                    : 'border-white/10 bg-neutral-900/40 text-neutral-400 hover:border-white/20'
-                }`}
-              >
-                <div className="font-serif text-lg font-medium text-white mb-1">Regular Fit</div>
-                <p className="text-xs text-neutral-400 leading-relaxed font-light">
-                  Everyday tailored comfort. Natural ease allowing unrestricted mobility.
-                </p>
-                <span className="text-[10px] font-mono text-neutral-500 mt-4 block">
-                  Target: +8cm to +14cm
-                </span>
-              </button>
-
-              {/* Oversized */}
-              <button
-                onClick={() => handleFinalPreferenceSaved('oversized')}
-                className={`p-5 rounded-2xl border transition-all ${
-                  fitPreference === 'oversized'
-                    ? 'border-white bg-white/10 text-white'
-                    : 'border-white/10 bg-neutral-900/40 text-neutral-400 hover:border-white/20'
-                }`}
-              >
-                <div className="font-serif text-lg font-medium text-white mb-1">Oversized Fit</div>
-                <p className="text-xs text-neutral-400 leading-relaxed font-light">
-                  Relaxed drape. Generous ease with dropped seams and architectural volume.
-                </p>
-                <span className="text-[10px] font-mono text-neutral-500 mt-4 block">
-                  Target: +16cm to +24cm
-                </span>
-              </button>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {[
+                { id: 'slim', label: 'Slim Fit', desc: 'Close-fitting contour with minimal ease across the chest and waist.' },
+                { id: 'regular', label: 'Regular Fit', desc: 'Classic tailored balance with standard comfort ease.' },
+                { id: 'oversized', label: 'Oversized Fit', desc: 'Relaxed silhouette with generous drape and dropped shoulders.' }
+              ].map((pref) => (
+                <button
+                  key={pref.id}
+                  onClick={() => handleFinalPreferenceSaved(pref.id)}
+                  className={`p-5 rounded-2xl border text-left transition-all ${
+                    fitPreference === pref.id
+                      ? 'border-cyan-400 bg-cyan-950/40 text-white shadow-[0_0_15px_rgba(0,240,255,0.2)]'
+                      : 'border-white/5 bg-neutral-900/40 text-neutral-400 hover:border-white/20'
+                  }`}
+                >
+                  <div className="font-serif text-lg text-white mb-1">{pref.label}</div>
+                  <div className="text-xs text-neutral-400 leading-relaxed font-light">{pref.desc}</div>
+                </button>
+              ))}
             </div>
           </div>
         )}
 
-        {/* STAGE 4: COMPLETED BANNER */}
+        {/* STAGE 4: COMPLETED STATE */}
         {stage === 'completed' && (
           <div className="py-12 text-center space-y-4">
-            <div className="w-16 h-16 rounded-full bg-white text-black flex items-center justify-center mx-auto shadow-2xl">
+            <div className="w-16 h-16 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center mx-auto shadow-[0_0_30px_rgba(16,185,129,0.3)]">
               <Check className="w-8 h-8" />
             </div>
-            <h3 className="font-serif text-2xl text-white">Universal Profile Established</h3>
-            <p className="text-xs font-mono text-neutral-400">
-              Synchronizing with the 3D Studio and Product Size Charts...
+            <h2 className="font-serif text-3xl text-white font-normal">
+              Profile Calibrated Successfully
+            </h2>
+            <p className="text-xs text-neutral-400 max-w-sm mx-auto font-light">
+              Your universal measurements are verified and saved. Calibrating real-time 3D wardrobe fit...
             </p>
           </div>
         )}
+
       </motion.div>
     </div>
   );
 }
-
