@@ -5,13 +5,13 @@ import ProductStudio3D from './components/studio/ProductStudio3D';
 import FitDemoSection from './components/fit-engine/FitDemoSection';
 import LuxuryGrid from './components/showcase/LuxuryGrid';
 import FitFinderModal from './components/onboarding/FitFinderModal';
-import { INITIAL_USER_PROFILE } from './engine/types';
+import { INITIAL_USER_PROFILE, DEMO_USER_PROFILE } from './engine/types';
 
 export default function App() {
   const [isFitFinderOpen, setIsFitFinderOpen] = useState(false);
   const [selectedProductIndex, setSelectedProductIndex] = useState(0);
 
-  // Load from localStorage or fallback to standard initial profile
+  // Load from localStorage or fallback to empty initial profile
   const [customerProfile, setCustomerProfile] = useState(() => {
     try {
       const saved = localStorage.getItem('fitmatch_profile');
@@ -34,20 +34,26 @@ export default function App() {
     setCustomerProfile(prev => ({
       ...prev,
       ...updates,
+      is_demo: false,
       measurements: {
-        ...prev.measurements,
+        ...(prev.measurements || {}),
         ...(updates.measurements || {})
       },
       measurement_metadata: {
-        ...prev.measurement_metadata,
+        ...(prev.measurement_metadata || {}),
         ...(updates.measurement_metadata || {}),
+        verified_by_user: true,
         updated_at: new Date().toISOString()
       },
       fit_preferences: {
-        ...prev.fit_preferences,
+        ...(prev.fit_preferences || {}),
         ...(updates.fit_preferences || {})
       }
     }));
+  };
+
+  const handleLoadDemoProfile = () => {
+    setCustomerProfile(DEMO_USER_PROFILE);
   };
 
   const handleDeleteProfile = () => {
@@ -75,6 +81,7 @@ export default function App() {
         <ProductStudio3D
           customerProfile={customerProfile}
           onOpenFitFinder={() => setIsFitFinderOpen(true)}
+          onLoadDemoProfile={handleLoadDemoProfile}
           selectedProductIndex={selectedProductIndex}
           onSelectProduct={setSelectedProductIndex}
         />
@@ -97,6 +104,7 @@ export default function App() {
         currentProfile={customerProfile}
         onSaveProfile={handleSaveProfile}
         onDeleteProfile={handleDeleteProfile}
+        onLoadDemoProfile={handleLoadDemoProfile}
       />
 
       {/* Minimalist Editorial Luxury Footer */}

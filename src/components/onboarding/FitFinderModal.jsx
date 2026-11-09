@@ -11,7 +11,8 @@ export default function FitFinderModal({
   onClose,
   currentProfile,
   onSaveProfile,
-  onDeleteProfile
+  onDeleteProfile,
+  onLoadDemoProfile
 }) {
   const [selectedMethod, setSelectedMethod] = useState(null); // 'manual' | 'voice' | 'camera' | 'photo' | null
   const [fitPreference, setFitPreference] = useState(currentProfile?.fit_preferences?.default_fit || 'regular');
@@ -141,73 +142,99 @@ export default function FitFinderModal({
                   </span>
                 </button>
 
-                {/* Method 3: Live Camera Scan */}
+                {/* Method 3: Live Camera Guided Capture (Experimental Prototype) */}
                 <button
                   onClick={() => {
                     setSelectedMethod('camera');
                     setStage('collecting');
                   }}
-                  className="p-5 rounded-2xl bg-neutral-900/60 border border-white/10 hover:border-white/40 text-left transition-all group flex flex-col justify-between"
+                  className="p-5 rounded-2xl bg-neutral-900/60 border border-white/10 hover:border-amber-400/50 text-left transition-all group flex flex-col justify-between relative"
                 >
                   <div>
-                    <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-white mb-3 group-hover:bg-white group-hover:text-black transition-colors">
-                      <Camera className="w-5 h-5" />
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-white group-hover:bg-amber-400 group-hover:text-black transition-colors">
+                        <Camera className="w-5 h-5" />
+                      </div>
+                      <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-amber-950/70 text-amber-300 border border-amber-500/30 uppercase font-semibold">
+                        Experimental
+                      </span>
                     </div>
                     <h3 className="font-serif text-base text-white font-medium mb-1">
-                      Live Camera Scan
+                      Camera Posture Reference
                     </h3>
                     <p className="text-xs text-neutral-400 font-light">
-                      Guided front and side posture capture with real-time pose silhouette tracking.
+                      Capture front & side posture reference with guided tape measurement verification.
                     </p>
                   </div>
-                  <span className="text-[10px] font-mono text-blue-400 mt-4 block">
-                    Private & In-Browser
+                  <span className="text-[10px] font-mono text-amber-400/90 mt-4 block">
+                    Guided Tape Verification ✦
                   </span>
                 </button>
 
-                {/* Method 4: Photo Upload */}
+                {/* Method 4: Photo Posture Reference (Experimental Prototype) */}
                 <button
                   onClick={() => {
                     setSelectedMethod('photo');
                     setStage('collecting');
                   }}
-                  className="p-5 rounded-2xl bg-neutral-900/60 border border-white/10 hover:border-white/40 text-left transition-all group flex flex-col justify-between"
+                  className="p-5 rounded-2xl bg-neutral-900/60 border border-white/10 hover:border-amber-400/50 text-left transition-all group flex flex-col justify-between relative"
                 >
                   <div>
-                    <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-white mb-3 group-hover:bg-white group-hover:text-black transition-colors">
-                      <Upload className="w-5 h-5" />
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-white group-hover:bg-amber-400 group-hover:text-black transition-colors">
+                        <Upload className="w-5 h-5" />
+                      </div>
+                      <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-amber-950/70 text-amber-300 border border-amber-500/30 uppercase font-semibold">
+                        Experimental
+                      </span>
                     </div>
                     <h3 className="font-serif text-base text-white font-medium mb-1">
-                      Upload Photos
+                      Photo Posture Reference
                     </h3>
                     <p className="text-xs text-neutral-400 font-light">
-                      Select full-body front and side pictures from your camera roll or device.
+                      Upload front & profile photographs for visual reference accompanied by tape measurements.
                     </p>
                   </div>
-                  <span className="text-[10px] font-mono text-neutral-400 mt-4 block">
-                    Calibrated Estimates
+                  <span className="text-[10px] font-mono text-amber-400/90 mt-4 block">
+                    Guided Tape Verification ✦
                   </span>
                 </button>
 
               </div>
             </div>
 
-            {/* Profile Deletion & Privacy Controls */}
-            <div className="flex items-center justify-between pt-4 border-t border-white/10 text-xs text-neutral-400">
+            {/* Demo Profile & Privacy Controls */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-white/10 text-xs text-neutral-400">
               <span className="flex items-center gap-1.5 text-neutral-400">
-                <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                Zero third-party telemetry. Speech recognition captures spoken values; speech does not measure your body.
+                <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                Zero third-party telemetry. Customer-verified measurements only.
               </span>
 
-              {onDeleteProfile && (
-                <button
-                  onClick={onDeleteProfile}
-                  className="text-rose-400 hover:text-rose-300 flex items-center gap-1.5 transition-colors font-mono text-[11px]"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>Reset Profile</span>
-                </button>
-              )}
+              <div className="flex items-center gap-2">
+                {onLoadDemoProfile && (
+                  <button
+                    onClick={() => {
+                      onLoadDemoProfile();
+                      onClose();
+                    }}
+                    className="text-cyan-400 hover:text-cyan-300 flex items-center gap-1.5 transition-colors font-mono text-[11px] px-3 py-1.5 rounded-full bg-cyan-950/60 border border-cyan-500/30"
+                    title="Load pre-calibrated 42R archetype for immediate demonstration"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>Load Demo Profile (42R)</span>
+                  </button>
+                )}
+
+                {onDeleteProfile && (
+                  <button
+                    onClick={onDeleteProfile}
+                    className="text-rose-400 hover:text-rose-300 flex items-center gap-1.5 transition-colors font-mono text-[11px] px-2 py-1"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Reset Profile</span>
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         )}

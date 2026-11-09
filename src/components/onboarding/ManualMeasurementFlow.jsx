@@ -18,29 +18,56 @@ export default function ManualMeasurementFlow({ initialProfile, onSave, onBack }
   const [step, setStep] = useState(1); // 1 = Entry, 2 = Review & Confirm
   const [activeTip, setActiveTip] = useState('chest_cm');
 
-  // Working state in cm
+  // Working state in cm - first-time visitors start empty, with example values shown as placeholders
   const [formData, setFormData] = useState({
-    height_cm: initialProfile?.height_cm || 178,
-    weight_kg: initialProfile?.weight_kg || 72,
-    chest_cm: initialProfile?.measurements?.chest_cm || 98,
-    waist_cm: initialProfile?.measurements?.waist_cm || 82,
-    hip_cm: initialProfile?.measurements?.hip_cm || 96,
-    shoulder_cm: initialProfile?.measurements?.shoulder_cm || 45,
-    neck_cm: initialProfile?.measurements?.neck_cm || 39,
-    arm_length_cm: initialProfile?.measurements?.arm_length_cm || 62,
-    inseam_cm: initialProfile?.measurements?.inseam_cm || 80,
-    thigh_cm: initialProfile?.measurements?.thigh_cm || 56
+    height_cm: initialProfile?.height_cm ?? '',
+    weight_kg: initialProfile?.weight_kg ?? '',
+    chest_cm: initialProfile?.measurements?.chest_cm ?? '',
+    waist_cm: initialProfile?.measurements?.waist_cm ?? '',
+    hip_cm: initialProfile?.measurements?.hip_cm ?? '',
+    shoulder_cm: initialProfile?.measurements?.shoulder_cm ?? '',
+    neck_cm: initialProfile?.measurements?.neck_cm ?? '',
+    arm_length_cm: initialProfile?.measurements?.arm_length_cm ?? '',
+    inseam_cm: initialProfile?.measurements?.inseam_cm ?? '',
+    thigh_cm: initialProfile?.measurements?.thigh_cm ?? ''
   });
 
   const [errors, setErrors] = useState({});
 
   // Unit conversion helpers
   const displayVal = (cmVal) => {
+    if (cmVal === '' || cmVal === null || cmVal === undefined) return '';
     if (unit === 'cm') return cmVal;
     return Math.round((cmVal / 2.54) * 10) / 10;
   };
 
+  const handleFillDemoValues = () => {
+    setFormData({
+      height_cm: 178,
+      weight_kg: 72,
+      chest_cm: 98,
+      waist_cm: 82,
+      hip_cm: 96,
+      shoulder_cm: 45,
+      neck_cm: 39,
+      arm_length_cm: 62,
+      inseam_cm: 80,
+      thigh_cm: 56
+    });
+    setErrors({});
+  };
+
   const handleInputChange = (key, val) => {
+    if (val === '') {
+      setFormData(prev => ({ ...prev, [key]: '' }));
+      setErrors(prev => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+      return;
+    }
+
     const num = parseFloat(val);
     if (isNaN(num)) return;
     const cmValue = unit === 'in' ? Math.round(num * 2.54 * 10) / 10 : num;
@@ -120,27 +147,37 @@ export default function ManualMeasurementFlow({ initialProfile, onSave, onBack }
 
   return (
     <div className="w-full">
-      {/* Unit Selector Toggle */}
-      <div className="flex items-center justify-between pb-5 mb-6 border-b border-white/10">
+      {/* Unit Selector Toggle & Demo Filler */}
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-5 mb-6 border-b border-white/10">
         <div>
           <h3 className="font-serif text-xl text-white">Manual Body Dimensions</h3>
           <p className="text-xs text-neutral-400">Step {step} of 2: {step === 1 ? 'Dimension Entry' : 'Verify & Confirm'}</p>
         </div>
-        <div className="flex items-center bg-neutral-900 border border-white/10 rounded-full p-1 text-xs">
+        <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => setUnit('cm')}
-            className={`px-3 py-1 rounded-full transition-all ${unit === 'cm' ? 'bg-white text-black font-semibold' : 'text-neutral-400 hover:text-white'}`}
+            onClick={handleFillDemoValues}
+            className="text-[11px] font-mono px-3 py-1.5 rounded-full bg-cyan-950/60 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-900 transition-colors flex items-center gap-1 shadow-sm"
+            title="Load standard 42R archetype demo measurements for testing"
           >
-            Metric (cm)
+            <span>⚡ Load Demo Values (42R)</span>
           </button>
-          <button
-            type="button"
-            onClick={() => setUnit('in')}
-            className={`px-3 py-1 rounded-full transition-all ${unit === 'in' ? 'bg-white text-black font-semibold' : 'text-neutral-400 hover:text-white'}`}
-          >
-            Imperial (in)
-          </button>
+          <div className="flex items-center bg-neutral-900 border border-white/10 rounded-full p-1 text-xs">
+            <button
+              type="button"
+              onClick={() => setUnit('cm')}
+              className={`px-3 py-1 rounded-full transition-all ${unit === 'cm' ? 'bg-white text-black font-semibold' : 'text-neutral-400 hover:text-white'}`}
+            >
+              Metric (cm)
+            </button>
+            <button
+              type="button"
+              onClick={() => setUnit('in')}
+              className={`px-3 py-1 rounded-full transition-all ${unit === 'in' ? 'bg-white text-black font-semibold' : 'text-neutral-400 hover:text-white'}`}
+            >
+              Imperial (in)
+            </button>
+          </div>
         </div>
       </div>
 
@@ -233,7 +270,8 @@ export default function ManualMeasurementFlow({ initialProfile, onSave, onBack }
                     value={displayVal(formData.neck_cm)}
                     onChange={(e) => handleInputChange('neck_cm', e.target.value)}
                     onFocus={() => setActiveTip('neck_cm')}
-                    className="w-full bg-neutral-900/80 border border-white/10 rounded-xl px-3 py-2 text-sm font-mono text-white"
+                    className="w-full bg-neutral-900/80 border border-white/10 rounded-xl px-3 py-2 text-sm font-mono text-white focus:outline-none focus:border-white transition-colors"
+                    placeholder="e.g. 39"
                   />
                 </div>
                 <div>
@@ -244,7 +282,8 @@ export default function ManualMeasurementFlow({ initialProfile, onSave, onBack }
                     value={displayVal(formData.arm_length_cm)}
                     onChange={(e) => handleInputChange('arm_length_cm', e.target.value)}
                     onFocus={() => setActiveTip('arm_length_cm')}
-                    className="w-full bg-neutral-900/80 border border-white/10 rounded-xl px-3 py-2 text-sm font-mono text-white"
+                    className="w-full bg-neutral-900/80 border border-white/10 rounded-xl px-3 py-2 text-sm font-mono text-white focus:outline-none focus:border-white transition-colors"
+                    placeholder="e.g. 62"
                   />
                 </div>
               </div>
@@ -265,7 +304,8 @@ export default function ManualMeasurementFlow({ initialProfile, onSave, onBack }
                     value={displayVal(formData.height_cm)}
                     onChange={(e) => handleInputChange('height_cm', e.target.value)}
                     onFocus={() => setActiveTip('height_cm')}
-                    className="w-full bg-neutral-900/80 border border-white/10 rounded-xl px-3 py-2 text-sm font-mono text-white"
+                    className="w-full bg-neutral-900/80 border border-white/10 rounded-xl px-3 py-2 text-sm font-mono text-white focus:outline-none focus:border-white transition-colors"
+                    placeholder={unit === 'cm' ? 'e.g. 178' : 'e.g. 70'}
                   />
                 </div>
                 <div>
@@ -273,8 +313,9 @@ export default function ManualMeasurementFlow({ initialProfile, onSave, onBack }
                   <input
                     type="number"
                     value={formData.weight_kg}
-                    onChange={(e) => setFormData(prev => ({ ...prev, weight_kg: parseFloat(e.target.value) || 70 }))}
-                    className="w-full bg-neutral-900/80 border border-white/10 rounded-xl px-3 py-2 text-sm font-mono text-white"
+                    onChange={(e) => setFormData(prev => ({ ...prev, weight_kg: parseFloat(e.target.value) || '' }))}
+                    className="w-full bg-neutral-900/80 border border-white/10 rounded-xl px-3 py-2 text-sm font-mono text-white focus:outline-none focus:border-white transition-colors"
+                    placeholder="e.g. 72"
                   />
                 </div>
               </div>
@@ -289,7 +330,8 @@ export default function ManualMeasurementFlow({ initialProfile, onSave, onBack }
                     value={displayVal(formData.hip_cm)}
                     onChange={(e) => handleInputChange('hip_cm', e.target.value)}
                     onFocus={() => setActiveTip('hip_cm')}
-                    className="w-full bg-neutral-900/80 border border-white/10 rounded-xl px-3 py-2 text-sm font-mono text-white"
+                    className="w-full bg-neutral-900/80 border border-white/10 rounded-xl px-3 py-2 text-sm font-mono text-white focus:outline-none focus:border-white transition-colors"
+                    placeholder="e.g. 96"
                   />
                 </div>
                 <div>
@@ -300,7 +342,8 @@ export default function ManualMeasurementFlow({ initialProfile, onSave, onBack }
                     value={displayVal(formData.inseam_cm)}
                     onChange={(e) => handleInputChange('inseam_cm', e.target.value)}
                     onFocus={() => setActiveTip('inseam_cm')}
-                    className="w-full bg-neutral-900/80 border border-white/10 rounded-xl px-3 py-2 text-sm font-mono text-white"
+                    className="w-full bg-neutral-900/80 border border-white/10 rounded-xl px-3 py-2 text-sm font-mono text-white focus:outline-none focus:border-white transition-colors"
+                    placeholder="e.g. 80"
                   />
                 </div>
               </div>

@@ -28,9 +28,9 @@ export const CATEGORIES = {
     primary_dimension: "chest_cm",
     primary_garment_key: "garment_chest_cm",
     ease_targets: {
-      slim: { chest: 4.0, waist: 6.0, shoulder: 0.5 },
-      regular: { chest: 8.0, waist: 10.0, shoulder: 1.5 },
-      oversized: { chest: 16.0, waist: 18.0, shoulder: 3.5 }
+      slim: { chest: 4.0, waist: 6.0, shoulder: 0.5, length: -1.0 },
+      regular: { chest: 8.0, waist: 10.0, shoulder: 1.5, length: 1.5 },
+      oversized: { chest: 16.0, waist: 18.0, shoulder: 3.5, length: 4.0 }
     },
     dimension_weights: {
       chest: 0.50,
@@ -39,7 +39,8 @@ export const CATEGORIES = {
     },
     critical_minimum_ease: {
       chest: 1.0, // A t-shirt must have at least 1cm ease to be wearable
-      shoulder: -1.0
+      shoulder: -1.0,
+      length: -4.0
     }
   },
   shirt: {
@@ -51,9 +52,9 @@ export const CATEGORIES = {
     primary_dimension: "chest_cm",
     primary_garment_key: "garment_chest_cm",
     ease_targets: {
-      slim: { chest: 6.0, waist: 6.0, neck: 1.5, shoulder: 1.0 },
-      regular: { chest: 10.0, waist: 10.0, neck: 2.5, shoulder: 2.0 },
-      oversized: { chest: 18.0, waist: 18.0, neck: 3.5, shoulder: 4.0 }
+      slim: { chest: 6.0, waist: 6.0, neck: 1.5, shoulder: 1.0, sleeve: 1.5 },
+      regular: { chest: 10.0, waist: 10.0, neck: 2.5, shoulder: 2.0, sleeve: 2.5 },
+      oversized: { chest: 18.0, waist: 18.0, neck: 3.5, shoulder: 4.0, sleeve: 4.5 }
     },
     dimension_weights: {
       chest: 0.40,
@@ -64,7 +65,8 @@ export const CATEGORIES = {
     critical_minimum_ease: {
       chest: 2.0,
       neck: 1.0,
-      shoulder: 0.0
+      shoulder: 0.0,
+      sleeve: -0.5
     }
   },
   jacket: {
@@ -87,7 +89,8 @@ export const CATEGORIES = {
     },
     critical_minimum_ease: {
       chest: 4.0,
-      shoulder: 0.5
+      shoulder: 0.5,
+      sleeve: 0.0
     }
   },
   jeans: {
@@ -111,7 +114,9 @@ export const CATEGORIES = {
     },
     critical_minimum_ease: {
       waist: -1.0, // Stretchy denim can allow slightly negative ease, but rigid requires >= 0
-      hip: 1.0
+      hip: 1.0,
+      thigh: 0.5,
+      inseam: -2.0
     }
   },
   dress: {
@@ -140,8 +145,52 @@ export const CATEGORIES = {
   }
 };
 
-export const INITIAL_USER_PROFILE = {
-  user_id: "ANON_GUEST",
+/**
+ * Empty First-Time Visitor Profile
+ * All body measurements are null and unverified.
+ * Example values are strictly displayed as UI input placeholders.
+ */
+export const EMPTY_USER_PROFILE = {
+  user_id: "ANON_GUEST_UNVERIFIED",
+  profile_label: "Guest Profile (Uncalibrated)",
+  is_demo: false,
+  height_cm: null,
+  weight_kg: null,
+  age_range: null,
+  unit: "cm",
+  measurements: {
+    chest_cm: null,
+    waist_cm: null,
+    hip_cm: null,
+    shoulder_cm: null,
+    neck_cm: null,
+    arm_length_cm: null,
+    sleeve_length_cm: null,
+    inseam_cm: null,
+    thigh_cm: null
+  },
+  measurement_metadata: {
+    source: null,
+    confidence: {},
+    verified_by_user: false,
+    is_demo: false,
+    created_at: null,
+    updated_at: null
+  },
+  fit_preferences: {
+    default_fit: "regular" // 'slim' | 'regular' | 'oversized'
+  }
+};
+
+/**
+ * Clearly Labeled Demo Profile
+ * Retains benchmark anthropometric values (Size 42R archetype)
+ * for testing and demonstration purposes only.
+ */
+export const DEMO_USER_PROFILE = {
+  user_id: "DEMO_ARCHETYPE_42R",
+  profile_label: "Demo Archetype (Size 42R / L)",
+  is_demo: true,
   height_cm: 178,
   weight_kg: 72,
   age_range: "25-34",
@@ -158,7 +207,7 @@ export const INITIAL_USER_PROFILE = {
     thigh_cm: 56
   },
   measurement_metadata: {
-    source: "manual", // 'manual' | 'camera' | 'photo' | 'ai_estimated_verified'
+    source: "demo_archetype",
     confidence: {
       chest_cm: 1.0,
       waist_cm: 1.0,
@@ -166,12 +215,27 @@ export const INITIAL_USER_PROFILE = {
       shoulder_cm: 1.0,
       height_cm: 1.0
     },
-    verified_by_user: true,
+    verified_by_user: false,
+    is_demo: true,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString()
   },
   fit_preferences: {
-    default_fit: "regular" // 'slim' | 'regular' | 'oversized'
+    default_fit: "regular"
   }
 };
+
+/**
+ * Default Initial Profile for first-time visitors is strictly the empty profile.
+ */
+export const INITIAL_USER_PROFILE = EMPTY_USER_PROFILE;
+
+/**
+ * Helper to check whether a profile contains real user-verified measurements
+ */
+export function isProfileCalibrated(profile) {
+  if (!profile || profile.is_demo) return false;
+  const m = profile.measurements || {};
+  return Boolean(m.chest_cm && m.waist_cm && profile.measurement_metadata?.verified_by_user);
+}
 
