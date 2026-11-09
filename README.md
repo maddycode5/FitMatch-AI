@@ -17,7 +17,7 @@
 
 ---
 
-## ✦ Overview
+## Overview
 
 **FitMatch AI** is a minimal luxury fashion-tech platform built to permanently eliminate e-commerce sizing uncertainty and reverse logistics waste. Traditional apparel retail relies on vanity sizing conventions and arbitrary brand comparisons (*e.g., "What size do you wear in Nike or Zara?"*), resulting in return rates exceeding 38% in premium apparel categories.
 
@@ -29,12 +29,12 @@ The platform couples a **deterministic category-aware sizing algorithm** with a 
 
 ---
 
-## ✦ Core Features & Capabilities
+## Core Features & Capabilities
 
 ### 1. Multi-Modal Universal Body Ingestion
 FitMatch AI establishes a single, universal customer measurement profile persisted across all brands:
 * **Mode 1: Hands-Free Voice Assistant (Gnani Prisma STT & Timbre TTS Engine)**
-  * **Step-by-Step Atelier Voice Guidance:** Speaks professional tailoring instructions sequentially across Upper Body (**#1 Chest $\to$ #2 Shoulder $\to$ #3 Neck**) and Lower Body (**#1 Waistline $\to$ #2 Hips $\to$ #3 Inseam**).
+  * **Step-by-Step Atelier Voice Guidance:** Speaks professional tailoring instructions sequentially across Upper Body (**1 Chest $\to$ 2 Shoulder $\to$ 3 Neck**) and Lower Body (**1 Waistline $\to$ 2 Hips $\to$ 3 Inseam**).
   * **Gnani Prisma Speech Recognition (STT):** Continuous speech recognition streaming calibrated for Indian English (`en-IN`) and global accents.
   * **Gnani Timbre & Voice Cloning (TTS):** Direct cloud neural voice pipeline with custom voice clone persona support and automatic local browser speech fallback.
   * **Multi-Key Automatic Credit Failover (`GnaniKeyPool`):** Auto-rotates between Primary, Secondary Fallback, and Tertiary Backup API keys if credits exhaust, ensuring 100% continuous uptime.
@@ -120,7 +120,7 @@ Rendered via Three.js and `@react-three/fiber` inside a cinematic obsidian cyber
 
 ---
 
-## ✦ System Architecture & Directory Layout
+## System Architecture & Directory Layout
 
 ```text
 FitMatch AI/
@@ -176,7 +176,7 @@ FitMatch AI/
 
 ---
 
-## ✦ Tech Stack
+## Tech Stack
 
 | Domain | Technology | Description |
 | :--- | :--- | :--- |
@@ -191,7 +191,7 @@ FitMatch AI/
 
 ---
 
-## ✦ Getting Started Locally
+## Getting Started Locally
 
 ### Prerequisites
 * **Node.js**: v18.0.0 or higher
@@ -224,7 +224,7 @@ FitMatch AI/
 
 ---
 
-## ✦ User Workflows
+## User Workflows
 
 ```mermaid
 flowchart TD
@@ -252,7 +252,7 @@ flowchart TD
 
 ---
 
-## ✦ License & Attribution
+## License & Attribution
 
 Released under the **[MIT License](LICENSE)**.  
 Copyright © 2026 **Madhav Kumar**. All rights reserved.
