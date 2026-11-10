@@ -120,6 +120,7 @@ export const DIMENSION_METADATA = {
   chest_cm: {
     key: 'chest_cm',
     label: 'Chest / Bust',
+    spokenLabel: 'Chest and Bust',
     spokenAliases: [
       'chest', 'bust', 'pecs', 'chest measurement', 'chest size', 
       'chess', 'chests', 'chast', 'chess size', 'around chest', 'around my chest',
@@ -180,13 +181,14 @@ export const DIMENSION_METADATA = {
     stepNumber: 1,
     totalSteps: 4,
     instruction: 'Please measure around your natural waistline, midway between your lowest rib and navel.',
-    stepPrompt: "Upper body complete! Now let's capture your lower body. First, please measure your natural waistline.",
+    stepPrompt: "First for lower body, please measure around your natural waistline.",
     confirmSpoken: 'Waistline confirmed.',
     testPhrases: ['Waist is 32 inches.', 'Waistline 82 centimetres.']
   },
   hip_cm: {
     key: 'hip_cm',
     label: 'Hips / Seat',
+    spokenLabel: 'Hips and Seat',
     spokenAliases: [
       'hip', 'hips', 'seat', 'buttocks', 'around hips', 'hip measurement', 'hips measurement',
       'kulhe'
@@ -203,6 +205,7 @@ export const DIMENSION_METADATA = {
   arm_length_cm: {
     key: 'arm_length_cm',
     label: 'Arm / Sleeve Length',
+    spokenLabel: 'Arm and Sleeve Length',
     spokenAliases: [
       'arm length', 'arm', 'arms', 'sleeve', 'sleeves', 'sleeve length', 'sleeve size',
       'baanh', 'bazu', 'haath'
@@ -403,38 +406,89 @@ export function parseSpokenMeasurement(transcript, activeDimensionKey = 'chest_c
 
 /**
  * Backend Voice API Client
- * Sends speech transcripts or audio to the secure FastAPI proxy
+ * Transcribes audio via Gnani Prisma STT (POST /api/voice/stt)
+ * and extracts biometric measurements with physiological validation.
  */
-export async function extractMeasurementsViaBackend(transcript, activeDimensionKey = 'chest_cm') {
+export async function transcribeAndExtractAudioViaBackend(audioBlob, activeDimensionKey = 'chest_cm', textFallback = null) {
   try {
-    const res = await fetch(`${API_BASE_URL}/api/voice/extract`, {
+    const formData = new FormData();
+    if (audioBlob) {
+      const mime = audioBlob.type || 'audio/webm';
+      const filename = mime.includes('wav') ? 'audio_recording.wav' : 'audio_recording.webm';
+      formData.append('file', audioBlob, filename);
+    }
+    formData.append('active_dimension', activeDimensionKey);
+    formData.append('lang', 'en-IN');
+    if (textFallback) {
+      formData.append('text_fallback', textFallback);
+    }
+
+    const res = await fetch(`${API_BASE_URL}/api/voice/stt`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        transcript,
-        default_dimension: activeDimensionKey
-      })
+      body: formData
     });
 
     if (res.ok) {
       const data = await res.json();
       return {
         ...data,
-        rawText: transcript
+        rawText: data.transcript || textFallback || ''
       };
     }
   } catch (err) {
-    console.warn('[Backend Voice Proxy] Offline or unreachable, using local fallback:', err);
+    console.warn('[Backend STT Proxy] Offline or unreachable, using local fallback:', err);
   }
 
-  // Fallback to client-side extraction
-  return parseSpokenMeasurement(transcript, activeDimensionKey);
+  // Fallback to client-side extraction if backend is offline
+  if (textFallback) {
+    return parseSpokenMeasurement(textFallback, activeDimensionKey);
+  }
+  return {
+    success: false,
+    error: 'Speech recognition failed. Please try speaking again.'
+  };
+}
+
+/**
+ * Compatibility wrapper for text-based utterances (e.g. test phrases)
+ * Routes directly through POST /api/voice/stt with text_fallback
+ */
+export async function extractMeasurementsViaBackend(transcript, activeDimensionKey = 'chest_cm') {
+  return transcribeAndExtractAudioViaBackend(null, activeDimensionKey, transcript);
+}
+
+function selectConsistentMaleVoice(voices) {
+  if (!voices || voices.length === 0) return null;
+  const malePatterns = [
+    /Microsoft Ravi/i,
+    /Microsoft Prabhat/i,
+    /Microsoft George/i,
+    /Microsoft Mark/i,
+    /Microsoft David/i,
+    /Google UK English Male/i,
+    /Daniel/i,
+    /Rishi/i,
+    /Alex/i,
+    /Guy/i,
+    /Ryan/i,
+    /\bMale\b/i
+  ];
+  for (const pattern of malePatterns) {
+    const match = voices.find(v => pattern.test(v.name));
+    if (match) return match;
+  }
+  // Avoid common female default OS voices so tone never clashes between male and female
+  const nonFemaleEn = voices.find(v =>
+    v.lang.startsWith('en') &&
+    !/(Zira|Hazel|Heera|Susan|Linda|Neerja|Samantha|Victoria|Karen|Female|Aria|Jenny|Natasha|Libby|Sonia)/i.test(v.name)
+  );
+  return nonFemaleEn || voices.find(v => v.lang.startsWith('en')) || voices[0];
 }
 
 /**
  * Text-to-Speech Engine
- * Routes through FastAPI backend proxy (POST /api/voice/tts) to Gnani Timbre,
- * falling back seamlessly to Web Speech API if backend requests fallback or is offline.
+ * Routes through FastAPI backend proxy (POST /api/voice/tts) to Gnani Timbre (Male voice Vikrant),
+ * falling back seamlessly to consistent Male Web Speech voice only if backend is unreachable.
  */
 class TimbreTTSEngine {
   constructor() {
@@ -442,18 +496,25 @@ class TimbreTTSEngine {
     this.muted = false;
     this.selectedVoice = null;
     this.isSpeaking = false;
+    this.lastSpeechEndedAt = 0;
     this.activeUtterances = new Set();
     this.speakingListeners = new Set();
     this.pendingTimeout = null;
     this.currentAudio = null;
+    this.persistentAudio = typeof Audio !== 'undefined' ? new Audio() : null;
+    this.currentPlayId = 0;
+    this.abortController = null;
+    this.lastSpokenText = '';
+    this.lastSpokenTimestamp = 0;
+    this.audioUrlCache = new Map();
+    this.speakingWatchdog = null;
 
     if (this.synth) {
       const loadVoices = () => {
         const voices = this.synth.getVoices();
-        this.selectedVoice = 
-          voices.find(v => v.lang.includes('en-GB') || v.name.includes('Natural') || v.name.includes('Daniel') || v.name.includes('Google UK English')) ||
-          voices.find(v => v.lang.startsWith('en')) || 
-          voices[0];
+        if (voices && voices.length > 0) {
+          this.selectedVoice = selectConsistentMaleVoice(voices);
+        }
       };
 
       loadVoices();
@@ -468,81 +529,242 @@ class TimbreTTSEngine {
     return () => this.speakingListeners.delete(fn);
   }
 
-  notifySpeaking(speaking) {
+  isInEchoCooldown(cooldownMs = 450) {
+    return this.isSpeaking || (Date.now() - this.lastSpeechEndedAt < cooldownMs);
+  }
+
+  notifySpeaking(speaking, durationHintMs = 10000) {
+    if (this.speakingWatchdog) {
+      clearTimeout(this.speakingWatchdog);
+      this.speakingWatchdog = null;
+    }
+    if (!speaking && this.isSpeaking) {
+      this.lastSpeechEndedAt = Date.now();
+    }
     this.isSpeaking = speaking;
+    if (speaking) {
+      // Safety watchdog: releases lock if browser audio/speech event fails to fire
+      this.speakingWatchdog = setTimeout(() => {
+        if (this.isSpeaking) {
+          console.warn('[TTS] Safety watchdog released speaking lock');
+          this.lastSpeechEndedAt = Date.now();
+          this.isSpeaking = false;
+          this.speakingListeners.forEach(fn => { try { fn(false); } catch (e) {} });
+        }
+      }, durationHintMs);
+    }
     this.speakingListeners.forEach(fn => {
       try { fn(speaking); } catch (e) { console.warn(e); }
     });
   }
 
-  speak(text, onEnd) {
-    if (this.muted || !text) {
-      if (onEnd) onEnd();
-      return;
-    }
-
-    this.speakWithBackendProxy(text, onEnd);
+  primeAudio() {
+    // Proactively unlocks persistent HTML5 Audio element & SpeechSynthesis on user click
+    try {
+      if (this.synth) {
+        if (this.synth.paused) this.synth.resume();
+      }
+      if (this.persistentAudio) {
+        this.persistentAudio.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
+        this.persistentAudio.play().then(() => {
+          this.persistentAudio.pause();
+          this.persistentAudio.currentTime = 0;
+        }).catch(() => {});
+      }
+    } catch (e) {}
   }
 
-  async speakWithBackendProxy(text, onEnd) {
+  async prefetch(text) {
+    if (!text || !text.trim() || this.audioUrlCache.has(text.trim())) return;
     try {
-      this.stop();
-      this.notifySpeaking(true);
-
       const status = backendVoiceManager.getStatus();
-
       const res = await fetch(`${API_BASE_URL}/api/voice/tts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          text: text.trim(),
+          voice_id: status.voiceCloneId || 'Vikrant',
+          lang: status.lang || 'en-IN',
+          speed: 0.95
+        })
+      });
+      if (res.ok) {
+        const blob = await res.blob();
+        if (blob && blob.size > 0) {
+          const url = URL.createObjectURL(blob);
+          this.audioUrlCache.set(text.trim(), url);
+        }
+      }
+    } catch (e) {}
+  }
+
+  silenceActiveAudio() {
+    if (this.abortController) {
+      try { this.abortController.abort(); } catch (e) {}
+      this.abortController = null;
+    }
+    if (this.currentAudio) {
+      try {
+        this.currentAudio.onended = null;
+        this.currentAudio.onerror = null;
+        this.currentAudio.pause();
+        this.currentAudio.currentTime = 0;
+        // Do NOT revoke ObjectURL here because audioUrlCache stores cached blobs for instant replay!
+      } catch (e) {}
+      this.currentAudio = null;
+    }
+    if (this.pendingTimeout) {
+      clearTimeout(this.pendingTimeout);
+      this.pendingTimeout = null;
+    }
+    if (this.synth && (this.synth.speaking || this.synth.pending)) {
+      try { this.synth.cancel(); } catch (e) {}
+      this.activeUtterances.clear();
+    }
+  }
+
+  speak(text, onEnd) {
+    if (this.muted || !text || !text.trim()) {
+      if (onEnd) onEnd();
+      return;
+    }
+
+    const trimmed = text.trim();
+    const now = Date.now();
+
+    // Deduplicate: skip redundant speak requests within 1.5s unless previously stopped
+    if (trimmed === this.lastSpokenText && (now - this.lastSpokenTimestamp < 1500)) {
+      if (onEnd) onEnd();
+      return;
+    }
+
+    this.lastSpokenText = trimmed;
+    this.lastSpokenTimestamp = now;
+
+    const playId = ++this.currentPlayId;
+    this.speakWithBackendProxy(trimmed, onEnd, playId);
+  }
+
+  async playAudioUrl(audioUrl, text, onEnd, playId) {
+    if (this.currentPlayId !== playId) return false;
+    const audio = this.persistentAudio || new Audio();
+    this.currentAudio = audio;
+    audio.src = audioUrl;
+
+    audio.onended = () => {
+      if (this.currentPlayId === playId) {
+        this.currentAudio = null;
+        this.notifySpeaking(false);
+        if (onEnd) onEnd();
+      }
+    };
+
+    audio.onerror = () => {
+      if (this.currentPlayId === playId) {
+        this.currentAudio = null;
+        this.speakLocal(text, onEnd, playId);
+      }
+    };
+
+    try {
+      this.notifySpeaking(true, Math.max(6000, text.length * 110));
+      await audio.play();
+      return true;
+    } catch (playErr) {
+      console.warn('[TTS Proxy] HTMLAudio play blocked/failed, using Web Speech fallback:', playErr);
+      if (this.currentPlayId === playId) {
+        this.currentAudio = null;
+        this.speakLocal(text, onEnd, playId);
+      }
+      return false;
+    }
+  }
+
+  async speakWithBackendProxy(text, onEnd, playId) {
+    try {
+      this.silenceActiveAudio();
+
+      // Instant 0ms Cache Hit: play cached audio immediately
+      if (this.audioUrlCache && this.audioUrlCache.has(text)) {
+        const cachedUrl = this.audioUrlCache.get(text);
+        await this.playAudioUrl(cachedUrl, text, onEnd, playId);
+        return;
+      }
+
+      this.abortController = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      const status = backendVoiceManager.getStatus();
+
+      // If backend is known to be offline/unconfigured, use local speech immediately with 0ms delay
+      if (!status.isBackendOnline && !status.hasKeys) {
+        this.speakLocal(text, onEnd, playId);
+        return;
+      }
+
+      // Pause echo during synthesis + wait reliably for Gnani Male Vikrant WAV (only fallback > 9000ms)
+      this.notifySpeaking(true, 16000);
+      let fallbackTriggered = false;
+      const timeoutId = setTimeout(() => {
+        fallbackTriggered = true;
+        if (this.currentPlayId === playId && !this.currentAudio) {
+          console.log('[TTS Proxy] Cloud synthesis exceeded 9.0s threshold, using male local speech');
+          if (this.abortController) {
+            try { this.abortController.abort(); } catch (e) {}
+          }
+          this.speakLocal(text, onEnd, playId);
+        }
+      }, 9000);
+
+      const res = await fetch(`${API_BASE_URL}/api/voice/tts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: this.abortController?.signal,
+        body: JSON.stringify({
           text,
-          voice_id: status.voiceCloneId || 'tailor_concierge',
+          voice_id: status.voiceCloneId || 'Vikrant',
           lang: status.lang || 'en-IN',
           speed: 0.95
         })
       });
 
+      clearTimeout(timeoutId);
+
+      // Discard stale or already-fallback response
+      if (this.currentPlayId !== playId || fallbackTriggered) return;
+
       // If backend indicates fallback (e.g. quota exhausted or cloud unreachable)
       if (res.headers.get('X-Voice-Fallback') === 'true' || !res.ok) {
-        console.log('[TTS Proxy] Backend requested local fallback:', res.headers.get('X-Voice-Error') || `HTTP ${res.status}`);
-        backendVoiceManager.checkHealth(); // Refresh status badge
-        this.speakLocal(text, onEnd);
+        this.speakLocal(text, onEnd, playId);
         return;
       }
 
       const audioBlob = await res.blob();
-      if (audioBlob.size === 0) {
-        this.speakLocal(text, onEnd);
+      if (this.currentPlayId !== playId || fallbackTriggered) return;
+
+      if (!audioBlob || audioBlob.size === 0) {
+        this.speakLocal(text, onEnd, playId);
         return;
       }
 
       const audioUrl = URL.createObjectURL(audioBlob);
-      this.currentAudio = new Audio(audioUrl);
+      if (this.audioUrlCache) {
+        this.audioUrlCache.set(text, audioUrl);
+      }
 
-      this.currentAudio.onended = () => {
-        URL.revokeObjectURL(audioUrl);
-        this.currentAudio = null;
-        this.notifySpeaking(false);
-        if (onEnd) onEnd();
-      };
-
-      this.currentAudio.onerror = (e) => {
-        console.warn('[TTS Proxy] Audio playback failed, using local speech:', e);
-        URL.revokeObjectURL(audioUrl);
-        this.currentAudio = null;
-        this.speakLocal(text, onEnd);
-      };
-
-      await this.currentAudio.play();
+      await this.playAudioUrl(audioUrl, text, onEnd, playId);
 
     } catch (err) {
-      console.warn('[TTS Proxy] Connection error, using local speech fallback:', err);
-      this.speakLocal(text, onEnd);
+      if (err.name === 'AbortError') {
+        return; // Expected when superseded or aborted on timeout
+      }
+      if (this.currentPlayId === playId) {
+        this.speakLocal(text, onEnd, playId);
+      }
     }
   }
 
-  speakLocal(text, onEnd) {
-    if (this.muted || !this.synth || !text) {
+  speakLocal(text, onEnd, playId) {
+    if (this.muted || !this.synth || !text || this.currentPlayId !== playId) {
+      this.notifySpeaking(false);
       if (onEnd) onEnd();
       return;
     }
@@ -552,35 +774,53 @@ class TimbreTTSEngine {
       this.pendingTimeout = null;
     }
 
-    if (this.synth.speaking || this.synth.pending) {
-      this.synth.cancel();
-    }
-
+    // Small 80ms gap prevents Chromium SpeechSynthesis cancel+speak race from silently dropping utterances
     this.pendingTimeout = setTimeout(() => {
+      if (this.currentPlayId !== playId) return;
+
       try {
         if (this.synth.paused) {
           this.synth.resume();
         }
 
-        const cleanText = text.replace(/([.?!])\s+/g, '$1, ');
-        const utterance = new SpeechSynthesisUtterance(cleanText);
+        // Always enforce consistent Male OS voice if fallback runs
+        const voices = this.synth.getVoices();
+        if (voices && voices.length > 0) {
+          this.selectedVoice = selectConsistentMaleVoice(voices);
+        }
+
+        const utterance = new SpeechSynthesisUtterance(text);
 
         if (this.selectedVoice) {
           utterance.voice = this.selectedVoice;
         }
         utterance.rate = 0.96;
         utterance.pitch = 1.0;
+        utterance.volume = 1.0;
 
+        // Retain strong reference (prevents Chromium GC from truncating mid-sentence after 1 word)
         this.activeUtterances.add(utterance);
+        if (typeof window !== 'undefined') {
+          window.__fitmatchActiveUtterance = utterance;
+        }
+
+        this.notifySpeaking(true, Math.max(6000, text.length * 110));
 
         utterance.onstart = () => {
-          this.notifySpeaking(true);
+          if (this.currentPlayId === playId) {
+            this.notifySpeaking(true, Math.max(6000, text.length * 110));
+          }
         };
 
         const cleanup = () => {
           this.activeUtterances.delete(utterance);
-          this.notifySpeaking(false);
-          if (onEnd) onEnd();
+          if (typeof window !== 'undefined' && window.__fitmatchActiveUtterance === utterance) {
+            window.__fitmatchActiveUtterance = null;
+          }
+          if (this.currentPlayId === playId) {
+            this.notifySpeaking(false);
+            if (onEnd) onEnd();
+          }
         };
 
         utterance.onend = cleanup;
@@ -589,29 +829,19 @@ class TimbreTTSEngine {
         this.synth.speak(utterance);
       } catch (err) {
         console.warn('TTS speak error:', err);
-        this.notifySpeaking(false);
-        if (onEnd) onEnd();
+        if (this.currentPlayId === playId) {
+          this.notifySpeaking(false);
+          if (onEnd) onEnd();
+        }
       }
-    }, 60);
+    }, 80);
   }
 
   stop() {
-    if (this.currentAudio) {
-      try {
-        this.currentAudio.pause();
-        this.currentAudio.currentTime = 0;
-      } catch (e) {}
-      this.currentAudio = null;
-    }
-    if (this.pendingTimeout) {
-      clearTimeout(this.pendingTimeout);
-      this.pendingTimeout = null;
-    }
-    if (this.synth) {
-      this.synth.cancel();
-      this.activeUtterances.clear();
-      this.notifySpeaking(false);
-    }
+    this.currentPlayId++;
+    this.lastSpokenTimestamp = 0;
+    this.silenceActiveAudio();
+    this.notifySpeaking(false);
   }
 
   toggleMute() {
@@ -624,116 +854,364 @@ class TimbreTTSEngine {
 }
 
 /**
- * Speech-to-Text Engine
- * Uses continuous browser speech recognition with accent calibration
- * and routes speech to backend /api/voice/extract for multi-measurement parsing
+ * Downsample Float32 PCM buffer from native hardware sampleRate (e.g. 48000Hz) to 16000Hz
+ */
+function downsampleBuffer(buffer, inputSampleRate, outputSampleRate = 16000) {
+  if (inputSampleRate === outputSampleRate) return buffer;
+  const sampleRateRatio = inputSampleRate / outputSampleRate;
+  const newLength = Math.round(buffer.length / sampleRateRatio);
+  const result = new Float32Array(newLength);
+  let offsetResult = 0;
+  let offsetBuffer = 0;
+  while (offsetResult < result.length) {
+    const nextOffsetBuffer = Math.round((offsetResult + 1) * sampleRateRatio);
+    let accum = 0;
+    let count = 0;
+    for (let i = offsetBuffer; i < nextOffsetBuffer && i < buffer.length; i++) {
+      accum += buffer[i];
+      count++;
+    }
+    result[offsetResult] = count > 0 ? accum / count : 0;
+    offsetResult++;
+    offsetBuffer = nextOffsetBuffer;
+  }
+  return result;
+}
+
+function writeWavString(view, offset, str) {
+  for (let i = 0; i < str.length; i++) {
+    view.setUint8(offset + i, str.charCodeAt(i));
+  }
+}
+
+/**
+ * Encodes Float32 PCM samples into a 16-bit 16kHz Mono PCM WAV Blob
+ * (Directly supported by Gnani Prisma STT v3 without format errors)
+ */
+function encodeWAV(samples, sampleRate = 16000) {
+  const buffer = new ArrayBuffer(44 + samples.length * 2);
+  const view = new DataView(buffer);
+
+  writeWavString(view, 0, 'RIFF');
+  view.setUint32(4, 36 + samples.length * 2, true);
+  writeWavString(view, 8, 'WAVEfmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true); // PCM
+  view.setUint16(22, 1, true); // Mono
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeWavString(view, 36, 'data');
+  view.setUint32(40, samples.length * 2, true);
+
+  let offset = 44;
+  for (let i = 0; i < samples.length; i++, offset += 2) {
+    const s = Math.max(-1, Math.min(1, samples[i]));
+    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+  }
+
+  return new Blob([view], { type: 'audio/wav' });
+}
+
+/**
+ * Speech-to-Text Engine powered by Web Audio 16kHz WAV Capture & Gnani Prisma STT
+ * Pauses capture during active TTS playback + 450ms echo cooldown to guarantee zero self-cancellation
+ * or speaker feedback, then records clean WAV audio to transmit to POST /api/voice/stt.
  */
 class PrismaSTTEngine {
-  constructor(onTranscript, onStateChange, ttsInstance = null) {
+  constructor(onTranscript, onStateChange, ttsInstance = null, getActiveDimension = null) {
     this.onTranscript = onTranscript;
     this.onStateChange = onStateChange;
     this.ttsInstance = ttsInstance;
-    this.recognition = null;
+    this.getActiveDimension = getActiveDimension || (() => 'chest_cm');
+
+    this.audioStream = null;
+    this.audioContext = null;
+    this.analyser = null;
+    this.scriptProcessor = null;
+    this.muteGain = null;
+    this.pcmChunks = [];
+    this.preSpeechBuffer = [];
+    this.vadInterval = null;
     this.isListening = false;
     this.shouldListen = false;
-    this.restartTimer = null;
+    this.speechDetected = false;
+    this.lastSpeechTime = 0;
+    this.isTransmitting = false;
 
-    const SpeechRecognition = typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition);
+    // Optional background browser recognition for live real-time character typing preview & instant numeric fast-path
+    const SpeechRec = typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition);
+    this.browserRecognition = SpeechRec ? new SpeechRec() : null;
+    this.lastInterimText = '';
+    this.lastFinalSubmittedAt = 0;
+    this.setupBrowserPreview();
+  }
 
-    if (SpeechRecognition) {
-      this.recognition = new SpeechRecognition();
-      this.recognition.continuous = true;
-      this.recognition.interimResults = true;
-      this.recognition.lang = 'en-IN';
+  setupBrowserPreview() {
+    if (!this.browserRecognition) return;
+    try {
+      this.browserRecognition.continuous = true;
+      this.browserRecognition.interimResults = true;
+      this.browserRecognition.lang = 'en-IN';
 
-      this.recognition.onstart = () => {
-        this.isListening = true;
-        if (this.onStateChange) this.onStateChange('listening');
-      };
-
-      this.recognition.onresult = (event) => {
-        if (this.ttsInstance && this.ttsInstance.isSpeaking) {
+      this.browserRecognition.onresult = (event) => {
+        // Acoustic Echo Rejection: ignore speech recognized while TTS is playing or cooling down
+        if (this.ttsInstance && this.ttsInstance.isInEchoCooldown(450)) {
           return;
         }
 
-        let interimTranscript = '';
-        let finalTranscript = '';
-
+        let interim = '';
+        let final = '';
         for (let i = event.resultIndex; i < event.results.length; ++i) {
-          const item = event.results[i];
-          if (item.isFinal) {
-            finalTranscript += item[0].transcript + ' ';
-          } else {
-            interimTranscript += item[0].transcript + ' ';
+          if (event.results[i].isFinal) final += event.results[i][0].transcript + ' ';
+          else interim += event.results[i][0].transcript + ' ';
+        }
+        const text = (final || interim).trim();
+        if (text) {
+          this.lastInterimText = text;
+          if (this.onTranscript) {
+            this.onTranscript({ interim: text });
+          }
+
+          // Instant fast-trigger if browser recognized a clear number or confirmation keyword
+          if (final && (/\d+/.test(final) || /\b(confirm|yes|correct|save|lock|sahi|haan|bilkul|no|cancel|wrong|theek)\b/i.test(final))) {
+            this.lastFinalSubmittedAt = Date.now();
+            this.finalizeWavUtterance(final.trim());
           }
         }
+      };
 
-        const cleanFinal = finalTranscript.trim();
-        const cleanInterim = interimTranscript.trim();
-
-        if (this.onTranscript && (cleanFinal || cleanInterim)) {
-          this.onTranscript({
-            interim: cleanInterim,
-            final: cleanFinal
-          });
+      this.browserRecognition.onerror = (e) => {
+        if (e.error !== 'no-speech' && e.error !== 'aborted') {
+          console.debug('Preview recognition notice:', e.error);
         }
       };
 
-      this.recognition.onerror = (event) => {
-        if (event.error === 'no-speech') {
-          return;
-        }
-        console.warn('STT recognition notice:', event.error);
-        if (this.onStateChange) this.onStateChange('error', event.error);
-      };
-
-      this.recognition.onend = () => {
-        this.isListening = false;
-
-        if (this.shouldListen) {
-          if (this.restartTimer) clearTimeout(this.restartTimer);
-          this.restartTimer = setTimeout(() => {
-            if (this.shouldListen && !this.isListening) {
-              try {
-                this.recognition.start();
-              } catch (e) {}
-            }
-          }, 150);
-        } else {
-          if (this.onStateChange) this.onStateChange('inactive');
+      this.browserRecognition.onend = () => {
+        if (this.shouldListen && this.browserRecognition) {
+          try { this.browserRecognition.start(); } catch (e) {}
         }
       };
+    } catch (e) {
+      console.debug('Browser preview init skipped:', e);
     }
   }
 
-  start() {
-    this.shouldListen = true;
-    if (this.recognition && !this.isListening) {
-      try {
-        this.recognition.start();
-      } catch (e) {
-        console.warn('Speech recognition start failed or already active:', e);
+  async finalizeWavUtterance(explicitFallbackText = null) {
+    if (this.isTransmitting) return;
+
+    const chunksToEncode = this.pcmChunks.splice(0, this.pcmChunks.length);
+    const fallbackText = explicitFallbackText || this.lastInterimText;
+    this.lastInterimText = '';
+    this.speechDetected = false;
+
+    // Require either non-empty text fallback or at least ~0.25s of speech samples
+    const totalSamples = chunksToEncode.reduce((acc, c) => acc + c.length, 0);
+    const sampleRate = this.audioContext?.sampleRate || 48000;
+    const minSamples = Math.round(sampleRate * 0.25);
+
+    if (totalSamples < minSamples && (!fallbackText || !fallbackText.trim())) {
+      return;
+    }
+
+    this.isTransmitting = true;
+    try {
+      let wavBlob = null;
+      if (totalSamples >= minSamples) {
+        const merged = new Float32Array(totalSamples);
+        let offset = 0;
+        for (const chunk of chunksToEncode) {
+          merged.set(chunk, offset);
+          offset += chunk.length;
+        }
+        const downsampled = downsampleBuffer(merged, sampleRate, 16000);
+        wavBlob = encodeWAV(downsampled, 16000);
       }
+
+      const currentActiveKey = this.getActiveDimension ? this.getActiveDimension() : 'chest_cm';
+      if (this.onStateChange) this.onStateChange('processing');
+
+      const result = await transcribeAndExtractAudioViaBackend(wavBlob, currentActiveKey, fallbackText);
+
+      if (this.onTranscript) {
+        this.onTranscript({
+          final: result.transcript || fallbackText,
+          backendResult: result
+        });
+      }
+    } finally {
+      this.isTransmitting = false;
+      if (this.shouldListen && this.onStateChange) {
+        this.onStateChange('listening');
+      }
+    }
+  }
+
+  async start() {
+    this.shouldListen = true;
+    if (this.isListening) return;
+
+    try {
+      if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+        throw new Error('MediaDevices API not supported in this browser environment');
+      }
+
+      this.audioStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
+      });
+
+      const AudioCtx = typeof window !== 'undefined' ? (window.AudioContext || window.webkitAudioContext) : null;
+      if (AudioCtx) {
+        this.audioContext = new AudioCtx();
+        const source = this.audioContext.createMediaStreamSource(this.audioStream);
+        this.analyser = this.audioContext.createAnalyser();
+        this.analyser.fftSize = 512;
+        source.connect(this.analyser);
+
+        // Capture uncompressed Float32 PCM frames for 16kHz WAV encoding
+        this.pcmChunks = [];
+        this.preSpeechBuffer = [];
+        this.scriptProcessor = this.audioContext.createScriptProcessor(4096, 1, 1);
+        this.muteGain = this.audioContext.createGain();
+        this.muteGain.gain.value = 0; // Mute passthrough to avoid feedback while keeping processor running
+
+        this.scriptProcessor.onaudioprocess = (e) => {
+          if (!this.shouldListen) return;
+
+          // Acoustic Echo Protection: never record while TTS is actively speaking or cooling down
+          if (this.ttsInstance && this.ttsInstance.isInEchoCooldown(450)) {
+            if (!this.speechDetected) {
+              this.pcmChunks = [];
+              this.preSpeechBuffer = [];
+            }
+            return;
+          }
+
+          const frame = new Float32Array(e.inputBuffer.getChannelData(0));
+          if (this.speechDetected) {
+            this.pcmChunks.push(frame);
+          } else {
+            // Retain up to 3 pre-speech frames (~250ms) so initial consonant isn't cut off
+            this.preSpeechBuffer.push(frame);
+            if (this.preSpeechBuffer.length > 3) {
+              this.preSpeechBuffer.shift();
+            }
+          }
+        };
+
+        source.connect(this.scriptProcessor);
+        this.scriptProcessor.connect(this.muteGain);
+        this.muteGain.connect(this.audioContext.destination);
+
+        const dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+        this.vadInterval = setInterval(() => {
+          if (!this.shouldListen || !this.analyser) return;
+
+          // Suspend VAD while TTS is speaking so speaker output never interrupts TTS or triggers fake STT!
+          if (this.ttsInstance && this.ttsInstance.isInEchoCooldown(450)) {
+            this.speechDetected = false;
+            this.pcmChunks = [];
+            return;
+          }
+
+          this.analyser.getByteFrequencyData(dataArray);
+          let sum = 0;
+          for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
+          const avg = sum / dataArray.length;
+
+          // Speech onset threshold (sensitive enough for gentle "yes"/"confirm", echo-gated during TTS)
+          if (avg > 10) {
+            if (!this.speechDetected) {
+              this.speechDetected = true;
+              if (this.preSpeechBuffer.length > 0) {
+                this.pcmChunks.push(...this.preSpeechBuffer);
+                this.preSpeechBuffer = [];
+              }
+            }
+            this.lastSpeechTime = Date.now();
+          } else if (this.speechDetected) {
+            // Finalize utterance cleanly after 600ms of silence
+            const elapsed = Date.now() - this.lastSpeechTime;
+            if (elapsed > 600) {
+              this.finalizeWavUtterance();
+            }
+          }
+        }, 100);
+      }
+
+      this.isListening = true;
+      if (this.onStateChange) this.onStateChange('listening');
+
+      // Start background browser preview for real-time live typing display
+      if (this.browserRecognition) {
+        try { this.browserRecognition.start(); } catch (e) {}
+      }
+
+    } catch (err) {
+      console.warn('Microphone access error:', err);
+      this.isListening = false;
+      if (this.onStateChange) this.onStateChange('error', err.message);
     }
   }
 
   stop() {
     this.shouldListen = false;
-    if (this.restartTimer) {
-      clearTimeout(this.restartTimer);
-      this.restartTimer = null;
+    this.isListening = false;
+    this.speechDetected = false;
+    this.pcmChunks = [];
+    this.preSpeechBuffer = [];
+
+    if (this.vadInterval) {
+      clearInterval(this.vadInterval);
+      this.vadInterval = null;
     }
-    if (this.recognition && this.isListening) {
+
+    if (this.scriptProcessor) {
       try {
-        this.recognition.stop();
-      } catch (e) {
-        console.warn('Speech recognition stop failed:', e);
-      }
+        this.scriptProcessor.disconnect();
+        this.scriptProcessor.onaudioprocess = null;
+      } catch (e) {}
+      this.scriptProcessor = null;
     }
+
+    if (this.muteGain) {
+      try { this.muteGain.disconnect(); } catch (e) {}
+      this.muteGain = null;
+    }
+
+    if (this.audioContext) {
+      try { this.audioContext.close(); } catch (e) {}
+      this.audioContext = null;
+    }
+
+    if (this.browserRecognition) {
+      try { this.browserRecognition.stop(); } catch (e) {}
+    }
+
+    if (this.audioStream) {
+      this.audioStream.getTracks().forEach(t => t.stop());
+      this.audioStream = null;
+    }
+
+    if (this.onStateChange) this.onStateChange('inactive');
+  }
+
+  flushRecording() {
+    this.finalizeWavUtterance();
   }
 
   isSupported() {
-    return Boolean(typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition));
+    return typeof window !== 'undefined' && Boolean(
+      (navigator.mediaDevices && (window.AudioContext || window.webkitAudioContext)) ||
+      window.SpeechRecognition ||
+      window.webkitSpeechRecognition
+    );
   }
 }
 
