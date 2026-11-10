@@ -6,13 +6,20 @@
 **FitMatch AI** eliminates apparel sizing guesswork by pairing an **8-dimension biometric body profile** (Upper Body: *Chest, Shoulder, Neck, Arm Length*; Lower Body: *Waist, Hip, Thigh, Inseam*) with a **category-specific deterministic fit engine** and a **real-time Three.js 3D studio**. Customers calibrate hands-free using conversational voice guidance (**Gnani Prisma STT** + **Gnani Timbre TTS** via a zero-secret FastAPI proxy) or manual entry, inspect 3D garment drape and tension heatmaps, and view exact garment-ease scores ($\text{Ease} = \text{Garment Spec} - \text{Body Spec}$).
 
 ## 2. Problem Statement
-* **Vanity Sizing & Returns:** Brand-to-brand label inconsistencies (*S/M/L* vs *42R*) drive high fit-related apparel returns.
-* **Single-Dimension Blind Spots:** Recommending sizes from one primary metric (*e.g., waist alone for jeans*) ignores critical fit points (*hip, thigh, inseam*), producing misleading scores.
-* **Browser Voice Frictions:** Raw cloud TTS PCM fails inside `<audio>`, browser WebM uploads fail strict cloud STT formats, concurrent TTS/STT triggers `429` limits, and speaker echo truncates speech mid-sentence.
+
+- **Inconsistent Clothing Sizes Across Brands:** Different brands follow different sizing standards, meaning identical size labels (S, M, L or 42R) can represent different garment dimensions. This makes it difficult for customers to identify the right size when shopping online.
+
+- **Incomplete Measurement-Based Recommendations:** Traditional sizing systems often depend on limited body measurements and overlook critical dimensions such as chest, shoulder, waist, hip, thigh and inseam. This can lead to poor-fitting garments, uncomfortable purchases and avoidable returns.
+
+- **Difficult and Inconvenient Body Measurement:** Accurately measuring multiple body dimensions using a measuring tape can be confusing, time-consuming and prone to human error. Customers need a simpler, guided and accessible way to record and verify their measurements.
 
 ## 3. Proposed Solution
-* **Strict Category-Specific Validation (`fitEngine.js`, `types.js`):** Runs `validateRequiredMeasurements()` and `validateGarmentDimensions()` before scoring: **T-Shirts** (*Chest, Waist, Shoulder*), **Shirts** (*Chest, Waist, Shoulder, Neck, Arm*), **Jeans/Trousers** (*Waist, Hip, Inseam, Thigh*), **Jackets** (*Chest, Shoulder, Arm*), **Dresses** (*Bust/Chest, Waist, Hip*). Returns `insufficient_data` badges or `insufficient_product_data` instead of premature sizes.
-* **Deterministic Ease & 3D Tension Studio:** Scores weighted ease, asymmetric tightness penalties ($1.8\times\text{--}2.5\times$), fabric stretch (`none: 0 cm`–`high: 5 cm`), and Three.js stress heatmaps over *Cashmere Blazer*, *Asymmetric Shirt*, *Pantalon*, and *Trench Coat* meshes, while separating `EMPTY_USER_PROFILE` from the 8-dimension `DEMO_USER_PROFILE` (`42R`).
+
+- **Universal 8-Dimension Body Profiling & Category-Specific Validation:** FitMatch AI creates a reusable body measurement profile covering Chest, Shoulder, Neck, Arm Length, Waist, Hip, Thigh and Inseam. Before generating a recommendation, the deterministic fit engine validates the measurements required for each garment category and checks the availability of corresponding garment dimensions. It prevents unreliable recommendations by identifying missing user measurements or incomplete product size charts.
+
+- **Deterministic Fit Intelligence & 3D Garment Visualization:** The fit engine compares body measurements against actual garment dimensions using garment ease analysis (Ease = Garment Measurement − Body Measurement). It evaluates multiple fit dimensions, accounts for fabric stretch and applies fit-preference-based scoring for Slim, Regular and Oversized styles. The Three.js-powered 3D studio complements this analysis with interactive garment visualization, fabric simulation and fit telemetry, helping users understand garment fit beyond conventional size labels.
+
+- **Gnani-Powered Hands-Free Measurement Assistance:** Integrating Gnani Prisma Speech-to-Text (STT) and Gnani Timbre Text-to-Speech (TTS), FitMatch AI enables users to speak their body measurements and receive spoken measurement guidance. Recognized values are extracted, validated against dimension-specific limits and presented for user confirmation before being added to the measurement profile. Manual measurement entry is also available.
 
 ## 4. Gnani AI Integration
 * **Gnani Timbre TTS (`api.vachana.ai/api/v1/tts/inference`, `timbre-v2.5`, Male `Vikrant`):** FastAPI wraps headerless 48kHz PCM streams into playable `RIFF` `audio/wav` buffers (`_ensure_playable_audio`), warms the opening prompt at startup, caches prompts (`_TTS_CACHE`), and locks offline fallback strictly to consistent OS male voices (`selectConsistentMaleVoice`).
