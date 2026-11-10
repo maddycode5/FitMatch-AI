@@ -5,6 +5,7 @@ import ManualMeasurementFlow from './ManualMeasurementFlow';
 import LiveCameraFlow from './LiveCameraFlow';
 import PhotoUploadFlow from './PhotoUploadFlow';
 import VoiceMeasurementFlow from './VoiceMeasurementFlow';
+import { timbreTTS } from '../../services/voiceMeasurementService';
 
 export default function FitFinderModal({
   isOpen,
@@ -96,6 +97,7 @@ export default function FitFinderModal({
                 {/* Method 1: Voice Guided Mode (Gnani Prisma & Timbre) */}
                 <button
                   onClick={() => {
+                    timbreTTS.primeAudio();
                     setSelectedMethod('voice');
                     setStage('collecting');
                   }}
@@ -227,7 +229,11 @@ export default function FitFinderModal({
 
                 {onDeleteProfile && (
                   <button
-                    onClick={onDeleteProfile}
+                    onClick={() => {
+                      onDeleteProfile();
+                      setStage('method_selection');
+                      setSelectedMethod(null);
+                    }}
                     className="text-rose-400 hover:text-rose-300 flex items-center gap-1.5 transition-colors font-mono text-[11px] px-2 py-1"
                   >
                     <Trash2 className="w-3.5 h-3.5" />

@@ -22,6 +22,7 @@ import {
   GUIDED_BODY_FLOW,
   parseSpokenMeasurement, 
   extractMeasurementsViaBackend,
+  transcribeAndExtractAudioViaBackend,
   timbreTTS, 
   PrismaSTTEngine,
   backendVoiceManager,
@@ -44,13 +45,50 @@ export default function VoiceMeasurementFlow({ initialProfile, onSave, onBack })
     chest_cm: initialProfile?.measurements?.chest_cm || null,
     shoulder_cm: initialProfile?.measurements?.shoulder_cm || null,
     neck_cm: initialProfile?.measurements?.neck_cm || null,
+    arm_length_cm: initialProfile?.measurements?.arm_length_cm || initialProfile?.measurements?.sleeve_length_cm || null,
     waist_cm: initialProfile?.measurements?.waist_cm || null,
     hip_cm: initialProfile?.measurements?.hip_cm || null,
+    thigh_cm: initialProfile?.measurements?.thigh_cm || null,
     inseam_cm: initialProfile?.measurements?.inseam_cm || null,
     height_cm: initialProfile?.height_cm || null
   });
   const measurementsRef = useRef(measurements);
   useEffect(() => { measurementsRef.current = measurements; }, [measurements]);
+
+  // Sync state if initialProfile changes (e.g. user loaded demo profile or switched profile)
+  useEffect(() => {
+    if (initialProfile?.measurements) {
+      setMeasurements(prev => ({
+        ...prev,
+        chest_cm: initialProfile.measurements.chest_cm ?? prev.chest_cm,
+        shoulder_cm: initialProfile.measurements.shoulder_cm ?? prev.shoulder_cm,
+        neck_cm: initialProfile.measurements.neck_cm ?? prev.neck_cm,
+        arm_length_cm: initialProfile.measurements.arm_length_cm ?? initialProfile.measurements.sleeve_length_cm ?? prev.arm_length_cm,
+        waist_cm: initialProfile.measurements.waist_cm ?? prev.waist_cm,
+        hip_cm: initialProfile.measurements.hip_cm ?? prev.hip_cm,
+        thigh_cm: initialProfile.measurements.thigh_cm ?? prev.thigh_cm,
+        inseam_cm: initialProfile.measurements.inseam_cm ?? prev.inseam_cm,
+        height_cm: initialProfile.height_cm ?? prev.height_cm
+      }));
+    }
+  }, [initialProfile]);
+
+  const handleLoadDemoValues = () => {
+    const demoMeasurements = {
+      chest_cm: 98,
+      shoulder_cm: 45,
+      neck_cm: 39,
+      arm_length_cm: 62,
+      waist_cm: 82,
+      hip_cm: 96,
+      thigh_cm: 56,
+      inseam_cm: 80,
+      height_cm: 178
+    };
+    setMeasurements(demoMeasurements);
+    measurementsRef.current = demoMeasurements;
+    speakInstruction("Loaded sample 42R benchmark measurements. Say 'Confirm' to verify, or speak any new measurement to customize.");
+  };
 
   // Track which measurements have been confirmed
   const [confirmedKeys, setConfirmedKeys] = useState(() => {
@@ -80,55 +118,75 @@ export default function VoiceMeasurementFlow({ initialProfile, onSave, onBack })
   const sttEngineRef = useRef(null);
   const interimDebounceRef = useRef(null);
 
-  // Subscribe to Backend Voice Proxy status
+  // Subscribe to Backend Voice Proxy status & active TTS playback indicator
   useEffect(() => {
-    return backendVoiceManager.addStatusListener((status) => {
+    backendVoiceManager.checkHealth();
+    const unsubStatus = backendVoiceManager.addStatusListener((status) => {
       setCloudStatus(status);
     });
+    const unsubSpeaking = timbreTTS.addSpeakingListener((speaking) => {
+      setIsTTSActive(speaking);
+    });
+    return () => {
+      unsubStatus();
+      unsubSpeaking();
+    };
   }, []);
 
-  // Initialize Speech Recognition with continuous live microphone streaming
+  // Initialize Speech Recognition with continuous 16kHz WAV capture + acoustic echo suppression
   useEffect(() => {
+    let isMounted = true;
     sttEngineRef.current = new PrismaSTTEngine(
-      ({ interim, final }) => {
+      ({ interim, final, backendResult }) => {
+        if (!isMounted) return;
         const text = final || interim;
-        setSpeechTranscript(text);
+        if (text) setSpeechTranscript(text);
 
+        if (backendResult) {
+          handleBackendResult(backendResult);
+          return;
+        }
+
+        // Only final speech utterances from browser fallback trigger text extraction
+        // if WAV uploader hasn't already handled them
         if (final && final.trim().length > 0) {
           if (interimDebounceRef.current) clearTimeout(interimDebounceRef.current);
           handleVoiceInput(final);
-        } else if (interim && interim.trim().length > 0) {
-          if (/\d+/.test(interim) || /\b(confirm|yes|correct|save|sahi hai|haan)\b/i.test(interim)) {
-            if (interimDebounceRef.current) clearTimeout(interimDebounceRef.current);
-            interimDebounceRef.current = setTimeout(() => {
-              handleVoiceInput(interim);
-            }, 800);
-          }
         }
       },
       (state, error) => {
+        if (!isMounted) return;
         if (state === 'listening') setIsListening(true);
+        if (state === 'processing') setIsProcessing(true);
         if (state === 'inactive') setIsListening(false);
         if (state === 'error' && error !== 'no-speech') {
           console.warn('STT Error:', error);
         }
       },
-      timbreTTS
+      timbreTTS,
+      () => activeKeyRef.current
     );
 
     setIsSTTSupported(sttEngineRef.current.isSupported());
 
-    // Auto-start microphone listening
+    // Start microphone listening
     sttEngineRef.current.start();
     setIsListening(true);
 
-    // Initial welcoming prompt
-    const activeMeta = DIMENSION_METADATA.chest_cm;
-    if (activeMeta && !isMuted) {
-      speakInstruction(`Voice Measurement Mode active. Let's start with your upper body. ${activeMeta.stepPrompt}`);
-    }
+    // Initial welcoming prompt: speaks Voice Calibration Active + Step 1 Gnani Timbre Guidance,
+    // then opens microphone listening once finished.
+    const welcomeTimer = setTimeout(() => {
+      if (isMounted && !isMuted) {
+        const firstMeta = DIMENSION_METADATA[activeKeyRef.current] || DIMENSION_METADATA.chest_cm;
+        speakInstruction(
+          `Voice calibration active. ${firstMeta.spokenLabel || firstMeta.label}. ${firstMeta.instruction}`
+        );
+      }
+    }, 150);
 
     return () => {
+      isMounted = false;
+      clearTimeout(welcomeTimer);
       if (interimDebounceRef.current) clearTimeout(interimDebounceRef.current);
       if (sttEngineRef.current) {
         sttEngineRef.current.stop();
@@ -137,11 +195,15 @@ export default function VoiceMeasurementFlow({ initialProfile, onSave, onBack })
     };
   }, []);
 
-  const speakInstruction = (text) => {
-    if (isMuted || !text) return;
+  const speakInstruction = (text, onEnd = null) => {
+    if (isMuted || !text) {
+      if (onEnd) onEnd();
+      return;
+    }
     setIsTTSActive(true);
     timbreTTS.speak(text, () => {
       setIsTTSActive(false);
+      if (onEnd) onEnd();
     });
   };
 
@@ -163,9 +225,17 @@ export default function VoiceMeasurementFlow({ initialProfile, onSave, onBack })
 
     const currentActiveKey = activeKeyRef.current;
     
-    // Call backend proxy for natural language extraction & physiological bounds validation
-    const result = await extractMeasurementsViaBackend(rawTranscript, currentActiveKey);
+    // Call backend STT proxy (POST /api/voice/stt)
+    const result = await transcribeAndExtractAudioViaBackend(null, currentActiveKey, rawTranscript);
+    handleBackendResult(result);
+  };
+
+  const handleBackendResult = (result) => {
     setIsProcessing(false);
+    if (!result) return;
+    if (result.transcript) {
+      setSpeechTranscript(result.transcript);
+    }
 
     // 1. Confirm Intent: "Yes" / "Correct" / "Confirm" / "Sahi hai"
     if (result.intent === 'confirm') {
@@ -173,9 +243,15 @@ export default function VoiceMeasurementFlow({ initialProfile, onSave, onBack })
       if (pending && pending.measurements && pending.measurements.length > 0) {
         confirmAllPending(pending.measurements);
       } else {
-        // Confirm single current active dimension
+        // Confirm pre-filled demo/existing value if valid
         const currKey = activeKeyRef.current;
-        confirmExtractedValue(currKey, measurementsRef.current[currKey]);
+        const currVal = measurementsRef.current[currKey];
+        if (currVal !== null && currVal !== undefined && currVal > 0) {
+          confirmExtractedValue(currKey, currVal);
+        } else {
+          const meta = DIMENSION_METADATA[currKey];
+          speakInstruction(`Please speak your ${meta?.spokenLabel || meta?.label} measurement in centimetres or inches first.`);
+        }
       }
       return;
     }
@@ -195,10 +271,20 @@ export default function VoiceMeasurementFlow({ initialProfile, onSave, onBack })
       setPendingExtraction(result);
       pendingExtractionRef.current = result;
 
-      // Speak confirmation prompt via Gnani Timbre
-      const promptToSpeak = result.confirmationPrompt || 
-        `Captured ${result.measurements[0].dimensionLabel} at ${result.measurements[0].value_cm} centimetres. Is that correct?`;
-      speakInstruction(promptToSpeak);
+      // Speak confirmation prompt via Gnani Timbre (or range warning if out of bounds)
+      const validMeasures = result.measurements.filter(m => m.isValid);
+      if (validMeasures.length > 0) {
+        const promptToSpeak = result.confirmationPrompt || 
+          `Captured ${validMeasures[0].dimensionLabel} at ${validMeasures[0].value_cm} centimetres. Is that correct?`;
+        speakInstruction(promptToSpeak);
+      } else {
+        const warningText = result.measurements[0]?.warning || "That number seems out of range. Please speak your measurement again.";
+        speakInstruction(warningText);
+      }
+    } else if (result.transcript && result.transcript.trim().length > 1) {
+      const currKey = activeKeyRef.current;
+      const label = DIMENSION_METADATA[currKey]?.label || 'measurement';
+      speakInstruction(`Heard "${result.transcript}". Please speak your ${label} number, such as 82 centimetres.`);
     } else if (result.error) {
       speakInstruction(result.error);
     }
@@ -219,7 +305,8 @@ export default function VoiceMeasurementFlow({ initialProfile, onSave, onBack })
       if (m.isValid && m.dimensionKey) {
         newMeasurements[m.dimensionKey] = m.value_cm;
         updatedConfirmed.add(m.dimensionKey);
-        confirmedLabels.push(m.dimensionLabel);
+        const meta = DIMENSION_METADATA[m.dimensionKey];
+        confirmedLabels.push(meta?.spokenLabel || m.dimensionLabel.replace(' / ', ' and ').split(' (')[0]);
       }
     });
 
@@ -255,7 +342,8 @@ export default function VoiceMeasurementFlow({ initialProfile, onSave, onBack })
     pendingExtractionRef.current = null;
     setSpeechTranscript('');
 
-    advanceGuidedFlow(updatedConfirmed, DIMENSION_METADATA[targetKey]?.label);
+    const targetMeta = DIMENSION_METADATA[targetKey];
+    advanceGuidedFlow(updatedConfirmed, targetMeta?.spokenLabel || targetMeta?.label);
   };
 
   const advanceGuidedFlow = (updatedConfirmed, confirmedLabel) => {
@@ -271,7 +359,7 @@ export default function VoiceMeasurementFlow({ initialProfile, onSave, onBack })
         setActiveKey(nextKey);
         activeKeyRef.current = nextKey;
         const nextMeta = DIMENSION_METADATA[nextKey];
-        speakInstruction(`${confirmedLabel} confirmed. ${nextMeta.stepPrompt}`);
+        speakInstruction(`${confirmedLabel} confirmed. Next, ${nextMeta.spokenLabel || nextMeta.label}. ${nextMeta.instruction}`);
       } else {
         // Upper complete, switch to lower body
         setActiveCategory('lower');
@@ -280,7 +368,7 @@ export default function VoiceMeasurementFlow({ initialProfile, onSave, onBack })
         setActiveKey(firstLowerKey);
         activeKeyRef.current = firstLowerKey;
         const nextMeta = DIMENSION_METADATA[firstLowerKey];
-        speakInstruction(`Upper body complete! Let's capture your lower body measurements. ${nextMeta.stepPrompt}`);
+        speakInstruction(`Upper body complete! Let's capture your lower body measurements. First, ${nextMeta.spokenLabel || nextMeta.label}. ${nextMeta.instruction}`);
       }
     } else {
       const remainingLower = lowerKeys.filter(k => !updatedConfirmed.has(k));
@@ -290,9 +378,9 @@ export default function VoiceMeasurementFlow({ initialProfile, onSave, onBack })
         setActiveKey(nextKey);
         activeKeyRef.current = nextKey;
         const nextMeta = DIMENSION_METADATA[nextKey];
-        speakInstruction(`${confirmedLabel} confirmed. ${nextMeta.stepPrompt}`);
+        speakInstruction(`${confirmedLabel} confirmed. Next, ${nextMeta.spokenLabel || nextMeta.label}. ${nextMeta.instruction}`);
       } else {
-        speakInstruction(`Outstanding! All measurements are confirmed. You can now save your universal profile.`);
+        speakInstruction(`Outstanding! All upper and lower body measurements are confirmed. You can now save your universal profile.`);
       }
     }
   };
@@ -307,7 +395,7 @@ export default function VoiceMeasurementFlow({ initialProfile, onSave, onBack })
     if (meta) {
       setActiveCategory(meta.category);
       activeCategoryRef.current = meta.category;
-      speakInstruction(`Selected ${meta.label}. ${meta.instruction}`);
+      speakInstruction(`${meta.spokenLabel || meta.label}. ${meta.instruction}`);
     }
   };
 
@@ -318,6 +406,8 @@ export default function VoiceMeasurementFlow({ initialProfile, onSave, onBack })
 
   const handleSaveAll = () => {
     onSave({
+      is_demo: false,
+      profile_label: "Verified Customer Profile",
       height_cm: measurements.height_cm,
       weight_kg: initialProfile?.weight_kg || 72,
       measurements: {
@@ -334,7 +424,9 @@ export default function VoiceMeasurementFlow({ initialProfile, onSave, onBack })
       measurement_metadata: {
         source: "voice_fastapi_gnani_proxy",
         confidence_score: 0.99,
-        verified_by_user: true
+        verified_by_user: true,
+        is_demo: false,
+        updated_at: new Date().toISOString()
       }
     });
   };
@@ -346,7 +438,8 @@ export default function VoiceMeasurementFlow({ initialProfile, onSave, onBack })
   const upperConfirmedCount = GUIDED_BODY_FLOW.upper.filter(k => confirmedKeys.has(k)).length;
   const lowerConfirmedCount = GUIDED_BODY_FLOW.lower.filter(k => confirmedKeys.has(k)).length;
   const isUpperComplete = upperConfirmedCount === GUIDED_BODY_FLOW.upper.length;
-  const isAllComplete = isUpperComplete && lowerConfirmedCount === GUIDED_BODY_FLOW.lower.length;
+  const isLowerComplete = lowerConfirmedCount === GUIDED_BODY_FLOW.lower.length;
+  const isAllComplete = isUpperComplete && isLowerComplete;
 
   return (
     <div className="space-y-4">
@@ -385,7 +478,11 @@ export default function VoiceMeasurementFlow({ initialProfile, onSave, onBack })
         {/* Audio Speaker Mute Toggle & Hear Instruction */}
         <div className="flex items-center gap-2 flex-shrink-0">
           <button
-            onClick={() => speakInstruction(activeMeta.instruction)}
+            onClick={() => {
+              timbreTTS.primeAudio();
+              timbreTTS.lastSpokenTimestamp = 0;
+              speakInstruction(activeMeta.instruction);
+            }}
             className="px-3 py-1.5 rounded-full border border-cyan-500/40 bg-cyan-950/60 text-cyan-300 hover:bg-cyan-900 text-xs font-mono flex items-center gap-1.5 transition-all"
             title="Hear instructions via Gnani Timbre TTS"
           >
@@ -479,6 +576,12 @@ export default function VoiceMeasurementFlow({ initialProfile, onSave, onBack })
               {activeKey === 'hip_cm' && (
                 <ellipse cx="100" cy="160" rx="38" ry="9" fill="none" stroke="#ffffff" strokeWidth="3" filter="url(#glow)" />
               )}
+              {activeKey === 'arm_length_cm' && (
+                <line x1="60" y1="70" x2="35" y2="145" stroke="#ffffff" strokeWidth="4" filter="url(#glow)" />
+              )}
+              {activeKey === 'thigh_cm' && (
+                <ellipse cx="80" cy="185" rx="14" ry="6" fill="none" stroke="#ffffff" strokeWidth="3" filter="url(#glow)" />
+              )}
               {activeKey === 'inseam_cm' && (
                 <line x1="85" y1="145" x2="75" y2="280" stroke="#ffffff" strokeWidth="3.5" filter="url(#glow)" />
               )}
@@ -487,13 +590,24 @@ export default function VoiceMeasurementFlow({ initialProfile, onSave, onBack })
             {/* Audio Waveform Indicator */}
             <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between glass-pill px-3 py-1.5 rounded-full text-[10px] font-mono bg-black/60 backdrop-blur-md">
               <div className="flex items-center gap-2">
-                <span className={`w-2 h-2 rounded-full ${isListening ? 'bg-emerald-400 animate-ping' : 'bg-neutral-500'}`} />
+                <span className={`w-2 h-2 rounded-full ${
+                  isTTSActive 
+                    ? 'bg-cyan-400 animate-pulse' 
+                    : isListening ? 'bg-emerald-400 animate-ping' : 'bg-neutral-500'
+                }`} />
                 <span className="text-neutral-300">
-                  {isProcessing ? 'Backend Parsing...' : isListening ? 'Listening via STT...' : 'Mic Paused'}
+                  {isProcessing 
+                    ? 'Backend Parsing...' 
+                    : isTTSActive 
+                      ? 'Gnani Timbre Speaking...' 
+                      : isListening ? 'Listening via STT...' : 'Mic Paused'}
                 </span>
               </div>
               <button 
-                onClick={() => speakInstruction(activeMeta.instruction)}
+                onClick={() => {
+                  timbreTTS.lastSpokenTimestamp = 0; // Allow immediate explicit repeat
+                  speakInstruction(activeMeta.instruction);
+                }}
                 className="text-cyan-400 hover:text-white flex items-center gap-1 font-semibold"
                 title="Hear Timbre instruction again"
               >
@@ -542,8 +656,12 @@ export default function VoiceMeasurementFlow({ initialProfile, onSave, onBack })
             <button
               onClick={() => {
                 setActiveCategory('upper');
+                activeCategoryRef.current = 'upper';
                 const remaining = GUIDED_BODY_FLOW.upper.find(k => !confirmedKeys.has(k)) || 'chest_cm';
                 setActiveKey(remaining);
+                activeKeyRef.current = remaining;
+                setPendingExtraction(null);
+                pendingExtractionRef.current = null;
               }}
               className={`flex-1 py-2 rounded-lg text-xs font-mono uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${
                 activeCategory === 'upper'
@@ -557,14 +675,18 @@ export default function VoiceMeasurementFlow({ initialProfile, onSave, onBack })
                   ? 'bg-emerald-500 text-black font-bold' 
                   : activeCategory === 'upper' ? 'bg-neutral-200 text-neutral-800' : 'bg-neutral-800 text-neutral-400'
               }`}>
-                {isUpperComplete ? '✓ Complete' : `${upperConfirmedCount}/3`}
+                {isUpperComplete ? '✓ Complete' : `${upperConfirmedCount}/${GUIDED_BODY_FLOW.upper.length}`}
               </span>
             </button>
             <button
               onClick={() => {
                 setActiveCategory('lower');
+                activeCategoryRef.current = 'lower';
                 const remaining = GUIDED_BODY_FLOW.lower.find(k => !confirmedKeys.has(k)) || 'waist_cm';
                 setActiveKey(remaining);
+                activeKeyRef.current = remaining;
+                setPendingExtraction(null);
+                pendingExtractionRef.current = null;
               }}
               className={`flex-1 py-2 rounded-lg text-xs font-mono uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${
                 activeCategory === 'lower'
@@ -574,11 +696,11 @@ export default function VoiceMeasurementFlow({ initialProfile, onSave, onBack })
             >
               <span>Lower Body</span>
               <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
-                lowerConfirmedCount === 3 
+                isLowerComplete 
                   ? 'bg-emerald-500 text-black font-bold' 
                   : activeCategory === 'lower' ? 'bg-neutral-200 text-neutral-800' : 'bg-neutral-800 text-neutral-400'
               }`}>
-                {lowerConfirmedCount === 3 ? '✓ Complete' : `${lowerConfirmedCount}/3`}
+                {isLowerComplete ? '✓ Complete' : `${lowerConfirmedCount}/${GUIDED_BODY_FLOW.lower.length}`}
               </span>
             </button>
           </div>
@@ -588,7 +710,7 @@ export default function VoiceMeasurementFlow({ initialProfile, onSave, onBack })
             <div className="flex items-center justify-between text-[10px] font-mono">
               <span className="text-cyan-400 uppercase tracking-widest flex items-center gap-1.5">
                 <Radio className="w-3 h-3 animate-pulse" />
-                <span>Prisma Speech Recognition:</span>
+                <span>Gnani Prisma Audio STT (MediaRecorder):</span>
               </span>
               <span className="text-neutral-400">{isListening ? 'Live Listening...' : 'Waiting for voice input'}</span>
             </div>
@@ -682,7 +804,7 @@ export default function VoiceMeasurementFlow({ initialProfile, onSave, onBack })
           {/* Interactive Measurements List */}
           <div className="space-y-1.5">
             <div className="flex justify-between items-center text-[10px] font-mono uppercase text-neutral-400 px-1">
-              <span>{activeCategory === 'upper' ? 'Upper Body Dimensions (1 to 3)' : 'Lower Body Dimensions (1 to 3)'}</span>
+              <span>{activeCategory === 'upper' ? `Upper Body Dimensions (1 to ${GUIDED_BODY_FLOW.upper.length})` : `Lower Body Dimensions (1 to ${GUIDED_BODY_FLOW.lower.length})`}</span>
               <span>Confirmed Value</span>
             </div>
 
@@ -733,6 +855,17 @@ export default function VoiceMeasurementFlow({ initialProfile, onSave, onBack })
                       <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-500/30">
                         Saved ✓
                       </span>
+                    ) : currentVal && isActive ? (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          confirmExtractedValue(dimKey, currentVal);
+                        }}
+                        className="text-[9px] font-mono px-2.5 py-0.5 rounded-full bg-cyan-400 text-black font-semibold hover:bg-cyan-300 transition-colors shadow"
+                        title="Confirm this value and move to next dimension"
+                      >
+                        Confirm ✓
+                      </button>
                     ) : (
                       <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-neutral-800 text-neutral-400">
                         Pending
@@ -750,7 +883,16 @@ export default function VoiceMeasurementFlow({ initialProfile, onSave, onBack })
               <span className="text-[10px] font-mono uppercase text-neutral-400">
                 Voice Simulator Tests:
               </span>
-              <span className="text-[9px] font-mono text-cyan-400">1-Click Test</span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleLoadDemoValues}
+                  className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[9px] font-mono hover:bg-amber-500/30 transition-all font-semibold"
+                  title="Populate complete 42R demo profile (4 upper + 4 lower dimensions)"
+                >
+                  ✦ Fill 42R Demo
+                </button>
+                <span className="text-[9px] font-mono text-cyan-400">1-Click Test</span>
+              </div>
             </div>
 
             {/* Target Compound Experience Requested */}
