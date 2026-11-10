@@ -1,14 +1,25 @@
+import asyncio
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.routes.voice import router as voice_router
+from app.services.gnani_tts import synthesize_speech
 
 app = FastAPI(
     title="FitMatch AI - Voice & Biometric Backend",
     description="Secure proxy & orchestration engine for Gnani Prisma STT, Timbre TTS, and Physiological Biometric Extraction",
     version="2.0.0"
 )
+
+@app.on_event("startup")
+async def warm_voice_cache():
+    async def _warm():
+        await asyncio.sleep(1.0)
+        await synthesize_speech(
+            "Voice calibration active. Chest and Bust. Please measure around the fullest part of your chest, keeping the tape level under your armpits."
+        )
+    asyncio.create_task(_warm())
 
 # CORS Middleware allowing React frontend to communicate securely
 app.add_middleware(

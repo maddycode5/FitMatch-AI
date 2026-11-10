@@ -24,12 +24,14 @@ class Settings(BaseSettings):
     GNANI_BACKUP_TOKEN: str = ""
 
     # Voice & Language Configuration
-    GNANI_VOICE_CLONE_ID: str = "tailor_concierge"
+    GNANI_VOICE_CLONE_ID: str = "Vikrant"
+    GNANI_VOICE: str = "Vikrant"
+    GNANI_MODEL: str = "timbre-v2.5"
     GNANI_LANG: str = "en-IN"
 
-    # API Endpoints
-    GNANI_TTS_ENDPOINT: str = "https://tts.gnani.ai/api/v1/tts"
-    GNANI_STT_ENDPOINT: str = "https://stt.gnani.ai/api/v1/stt"
+    # API Endpoints (Official Gnani Vachana Platform)
+    GNANI_TTS_ENDPOINT: str = "https://api.vachana.ai/api/v1/tts/inference"
+    GNANI_STT_ENDPOINT: str = "https://api.vachana.ai/stt/v3"
 
     # Server Configuration
     HOST: str = "0.0.0.0"

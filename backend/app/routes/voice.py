@@ -1,10 +1,10 @@
-import io
+import re
 from typing import Optional
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Response
 from pydantic import BaseModel
 from app.services.gnani_stt import transcribe_audio
 from app.services.gnani_tts import synthesize_speech
-from app.services.measurement_extractor import extract_measurements
+from app.services.measurement_extractor import extract_measurements, parse_spoken_number
 from app.services.gnani_fallback import fallback_manager
 from app.config import settings
 
@@ -36,16 +36,29 @@ async def speech_to_text(
     transcript = ""
     stt_meta = {}
 
-    if file:
+    # Fast-Path: If speech recognizer already provided numbers or intent,
+    # skip high-latency cloud roundtrip to respond in ~5ms
+    clean_fallback = (text_fallback or "").strip().lower()
+    has_numbers_or_intent = bool(
+        clean_fallback and (
+            re.search(r"\d+", clean_fallback) or 
+            parse_spoken_number(clean_fallback) is not None or
+            re.search(r"\b(confirm|yes|correct|save|lock|good|done|approve|proceed|haan|sahi|bilkul|no|cancel|wrong|redo|nahi|galat)\b", clean_fallback)
+        )
+    )
+
+    if has_numbers_or_intent:
+        transcript = text_fallback
+    elif file:
         audio_bytes = await file.read()
         content_type = file.content_type or "audio/webm"
         stt_result = await transcribe_audio(audio_bytes, content_type=content_type, lang=lang)
         stt_meta = stt_result
 
-        if stt_result.get("success"):
+        if stt_result.get("success") and stt_result.get("transcript"):
             transcript = stt_result.get("transcript", "")
         else:
-            # If Gnani returns error or local fallback is requested, allow text_fallback if supplied
+            # If Gnani returns error, empty transcript, or fallback is requested, allow text_fallback if supplied
             if text_fallback:
                 transcript = text_fallback
             else:
@@ -68,10 +81,10 @@ async def speech_to_text(
     return {
         "success": True,
         "transcript": transcript,
-        "intent": extraction["intent"],
-        "measurements": extraction["measurements"],
-        "primaryMeasurement": extraction["primaryMeasurement"],
-        "confirmationPrompt": extraction["confirmationPrompt"],
+        "intent": extraction.get("intent", "measurement"),
+        "measurements": extraction.get("measurements", []),
+        "primaryMeasurement": extraction.get("primaryMeasurement"),
+        "confirmationPrompt": extraction.get("confirmationPrompt"),
         "keyStatus": fallback_manager.get_status(),
         "sttMeta": {
             "key_used": stt_meta.get("key_used"),
@@ -134,4 +147,10 @@ async def get_status():
         },
         "keyPool": fallback_manager.get_status()
     }
+
+@router.post("/reset-keys")
+async def reset_keys():
+    """Resets key pool back to primary key."""
+    fallback_manager.reset_keys()
+    return {"status": "ok", "keyPool": fallback_manager.get_status()}
 

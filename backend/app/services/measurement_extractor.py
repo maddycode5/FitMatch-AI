@@ -163,14 +163,19 @@ def extract_measurements(transcript: str, default_dimension: str = "chest_cm") -
         unit = "cm"
         value_cm = value
 
+        bounds = MEASUREMENT_BOUNDS.get(dim_key, {"min": 40, "max": 200, "label": "Measurement"})
+
         if re.search(r"\b(inch|inches|inche)\b", clause):
+            unit = "inches"
+            value_cm = round(value * 2.54, 1)
+        elif value < bounds["min"] and (value * 2.54) >= bounds["min"] and (value * 2.54) <= bounds["max"]:
+            # Smart Inch Auto-detection (e.g. "waist 32" -> 32 inches = 81.3 cm)
             unit = "inches"
             value_cm = round(value * 2.54, 1)
         else:
             value_cm = round(value, 1)
 
         # Physiological Validation
-        bounds = MEASUREMENT_BOUNDS.get(dim_key, {"min": 40, "max": 200, "label": "Measurement"})
         is_valid = bounds["min"] <= value_cm <= bounds["max"]
         warning = None
         if not is_valid:
@@ -216,10 +221,16 @@ def extract_measurements(transcript: str, default_dimension: str = "chest_cm") -
                 "clauseText": clean
             })
 
-    # Build confirmation prompt for TTS
+    # Build natural, conversational confirmation prompt for TTS
     confirmation_prompt = ""
     if detected_measurements:
-        phrases = [f"{m['dimensionLabel']} is {m['value_cm']} centimetres" for m in detected_measurements if m['isValid']]
+        phrases = []
+        for m in detected_measurements:
+            if m["isValid"]:
+                spoken_dim = m["dimensionLabel"].replace(" / ", " and ").split(" (")[0]
+                val = m["value_cm"]
+                spoken_val = str(int(val)) if float(val).is_integer() else str(val)
+                phrases.append(f"{spoken_dim} is {spoken_val} centimetres")
         if phrases:
             confirmation_prompt = "Your " + " and ".join(phrases) + ". Is that correct?"
 
