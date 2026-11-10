@@ -28,6 +28,8 @@ $$\text{Garment Ease} = \text{Physical Garment Dimension} - \text{Customer Body 
 
 The platform couples a **deterministic category-aware sizing algorithm** with a **real-time 3D biometric holographic customizer** that drapes photorealistic garments from **The Virtual Archive** directly over your custom anatomical morphology.
 
+> 📄 **1-Page Executive Summary & Architecture Proof:** See [`solution.md`](solution.md).
+
 ---
 
 ## Core Features & Capabilities
@@ -149,6 +151,8 @@ Rendered via Three.js and `@react-three/fiber` inside a cinematic obsidian cyber
 
 ```text
 FitMatch AI/
+├── solution.md                  # 1-page architecture brief & Gnani API/UI proof
+├── docs/screenshots/            # System architecture diagram & frontend/API visuals
 ├── index.html                   # HTML entry with Playfair & JetBrains font imports
 ├── vite.config.js               # Optimized Vite bundler configuration
 ├── tailwind.config.js           # Custom luxury dark-mode theme & glassmorphic utilities
@@ -157,7 +161,7 @@ FitMatch AI/
 │
 ├── backend/                     # Secure FastAPI Voice & Biometric Proxy
 │   ├── requirements.txt         # FastAPI, Uvicorn, httpx, pydantic dependencies
-│   ├── .env.example             # Template for GNANI_API_KEY, GNANI_TOKEN, lang codes
+│   ├── .env.example             # Template for GNANI_ACCESS_KEY, GNANI_TOKEN, GNANI_LANG
 │   └── app/
 │       ├── main.py              # FastAPI app factory, CORS, & startup voice cache warm-up
 │       ├── config.py            # Vachana endpoints (`api.vachana.ai`), Vikrant voice & keys
@@ -249,7 +253,7 @@ pip install -r requirements.txt
 
 # Configure backend environment variables
 cp .env.example .env
-# Fill in your GNANI_API_KEY, GNANI_TOKEN, GNANI_LANG_CODE, etc.
+# Fill in your GNANI_ACCESS_KEY, GNANI_TOKEN, GNANI_VOICE, GNANI_LANG, etc.
 
 # Start FastAPI voice proxy server
 python -m uvicorn app.main:app --host 0.0.0.0 --port 8000

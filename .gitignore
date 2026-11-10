@@ -31,3 +31,6 @@ pnpm-debug.log*
 .DS_Store
 Thumbs.db
 
+# Temporary local audio captures
+fitmatch_test.wav
+
