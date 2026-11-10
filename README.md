@@ -41,14 +41,14 @@ FitMatch AI establishes a single, universal customer measurement profile without
   * **Interactive Placeholders:** Input fields display realistic target ranges as light placeholders (*e.g., `e.g. 98 cm`, `e.g. 82 cm`*) rather than pre-filling form values.
   * **Dedicated Demo Archetype (`DEMO_USER_PROFILE`):** Evaluators and reviewers can click `⚡ Load Demo Profile (42R)` in the 3D customizer, manual form, or modal footer to immediately test sizing recommendations on a benchmark 42R morphology without confounding verified biometrics.
 
-* **Mode 1: Hands-Free Voice Assistant (Dual-Tier Speech Pipeline + Gnani Cloud)**
+* **Mode 1: Hands-Free Voice Assistant (Gnani Vachana v1/v3 + Live WAV Pipeline)**
   * **Zero Client Secrets Architecture:** React Frontend contains zero private API keys. All audio processing and credentials are securely proxied via FastAPI (`http://localhost:8000`).
-  * **Real Audio Capture & Gnani Prisma STT:** Employs an in-browser `AudioRecorder` capturing high-fidelity `audio/wav` microphone buffers transmitted directly to `POST /api/voice/stt` (Gnani Prisma STT proxy).
-  * **Dual-Tier Live Mode:** Uses browser Web Speech recognition for instantaneous interim speech previews while streaming the actual audio buffer payload to Gnani Prisma STT for final transcription.
-  * **Gnani Timbre Neural TTS:** Conversational voice pipeline with tailored audio guidance and automatic local browser speech fallback.
-  * **Multi-Measurement Spoken Extraction:** Recognizes compound sentences (*e.g., "My chest is 98 centimetres, waist is 82 centimetres, and inseam is 80"*), splits clauses, converts imperial/metric units, and validates across physiological anthropometric bounds.
-  * **Comprehensive Body Dimensions:** Supports voice extraction for Chest, Shoulders, Neck, Arm/Sleeve Length, Waistline, Hips, Thigh Circumference, and Inseam in English, Hindi, and Hinglish (*"chhati"*, *"seena"*, *"kamar"*, *"gala"*, *"baanh"*, *"jaangh"*, *"taang"*).
-  * **Interactive Anatomical HUD:** SVG body silhouette with dynamic laser highlight bands illuminating each active measurement zone.
+  * **16kHz PCM WAV Capture & Gnani Prisma STT (`prisma-v2.5`):** Captures clean 16-bit 16kHz mono `.wav` audio streams in-browser via Web Audio (`encodeWAV`) and forwards them to `POST /api/voice/stt` (`https://api.vachana.ai/stt/v3`), paired with Web Speech fast-path previews.
+  * **Gnani Timbre Neural TTS (`timbre-v2.5` — Male Voice `Vikrant`):** Wraps Gnani's raw 48kHz linear PCM stream into browser-playable `RIFF` `audio/wav` headers on the backend, warms the opening calibration greeting on FastAPI startup, and locks local fallbacks strictly to consistent male voices.
+  * **Concurrency-Safe API Lock & Key Failover:** Serializes TTS/STT cloud requests through a shared `asyncio.Lock` (`api_lock`) to obey Gnani's 1-active-request concurrency limit while routing transient `429` bursts without falsely exhausting API keys.
+  * **Acoustic Echo Gating & Conversational 4+4 Flow:** Automatically suspends STT capture during active TTS playback plus a 450ms echo tail cooldown (eliminating mid-word self-cancellation). Follows a guided loop: `"Voice calibration active"` + Timbre Guidance → Listen → Read-back confirmation (*"Your Chest and Bust is 98 centimetres. Is that correct?"*) → Voice `"Confirm"` or tap → Auto-advance across 4 Upper (`Chest / Bust`, `Shoulder Width`, `Neck Circumference`, `Arm / Sleeve Length`) and 4 Lower (`Waistline`, `Hips / Seat`, `Thigh Circumference`, `Inseam`) dimensions, with inline **"✦ Fill 42R Demo"** and **"Confirm ✓"** triggers.
+  * **Smart Unit Conversion & Multilingual Bounds Extraction:** Automatically converts imperial shorthands (*e.g. "waist 32" → `81.3 cm`*), supports compound utterances, and parses English, Hindi, and Hinglish aliases (*"chhati"*, *"seena"*, *"kamar"*, *"gala"*, *"baanh"*, *"jaangh"*, *"taang"*) within physiological bounds.
+  * **Interactive Anatomical HUD:** SVG body silhouette with dynamic laser highlight bands illuminating each active upper/lower body zone alongside real-time speaking/listening state indicators.
 
 * **Mode 2: Guided Manual Tape Entry**
   * Step-by-step visual placement guides for Chest, Waist, Hips, Shoulders, Neck, Arm/Sleeve length, Thigh, and Inseam.
@@ -70,13 +70,14 @@ FitMatch AI establishes a single, universal customer measurement profile without
 
 Unlike opaque black-box recommendations, FitMatch AI utilizes transparent biomechanical ease formulas:
 
-* **Comprehensive Category Dimension Matrices:**
-  Every category scores all declared dimensions with normalized weights summing to $1.00$:
-  * **Jeans & Trousers (`jeans`):** Multi-point scoring across **Waist Circumference** (weight: 0.45), **Hip Clearance** (0.30), **Thigh Ease** (0.15, $\sim +2\text{ to }+4.5\text{ cm}$), and **Inseam Leg Break** (0.10, $\sim 0\text{ to }+2\text{ cm}$).
-  * **Tailored Shirts (`shirt`):** Evaluates **Chest Ease** (0.40), **Shoulder Width** (0.30), **Collar/Neck Comfort** (0.15, $\sim +1.5\text{ to }+3.5\text{ cm}$ buttoned closure), and **Sleeve Cuff Alignment** (0.15, $\sim +1.5\text{ to }+4.5\text{ cm}$).
-  * **Jackets & Outerwear (`jacket`):** Scores structured **Chest Ease** (0.45) over canvassing, **Shoulder Articulation** (0.35), and **Tailored Sleeve Length** (0.20, $\sim +3\text{ to }+6\text{ cm}$).
-  * **T-Shirts & Tops (`tshirt`):** Evaluates **Chest Room** (0.50), **Shoulder Seam Alignment** (0.35), and **Torso Drape Length** (0.15, benchmarked against $41\%$ of standing height).
-  * **Dresses (`dress`):** Evaluates **Chest Ease** (0.35), **Waistline Ease** (0.35), and **Hip Drape** (0.30).
+* **Strict Category-Specific Measurement Enforcement (`validateRequiredMeasurements` & `validateGarmentDimensions`):**
+  Before scoring or recommending any garment size, `fitEngine.js` strictly verifies that **all essential body dimensions** declared in `CATEGORIES` exist, are finite numbers $> 0$, and match valid size-chart garment dimensions:
+  * **Jeans & Trousers (`jeans`, `trousers`):** Requires **Waist, Hip, Inseam, Thigh** (weights: Waist 0.40, Hip 0.30, Thigh 0.20, Inseam 0.10). Incomplete profiles return `status: "insufficient_data"` with explicit missing dimension badges instead of a misleading fit score.
+  * **Tailored Shirts (`shirt`):** Requires **Chest, Waist, Shoulder, Neck, Arm Length** (weights: Chest 0.35, Waist 0.25, Shoulder 0.20, Neck 0.10, Sleeve 0.10).
+  * **Jackets & Outerwear (`jacket`):** Requires **Chest, Shoulder, Arm Length** (weights: Chest 0.45, Shoulder 0.35, Sleeve 0.20).
+  * **T-Shirts (`tshirt`):** Requires **Chest, Waist, Shoulder** (weights: Chest 0.45, Shoulder 0.30, Waist 0.25).
+  * **Dresses (`dress`):** Requires **Chest/Bust, Waist, Hip** (weights: Chest 0.35, Waist 0.35, Hip 0.30).
+  * **Product Size-Chart Integrity:** Returns `status: "insufficient_product_data"` if a product's size chart is missing critical corresponding garment columns (`validateGarmentDimensions`).
 
 * **Precise Fabric Stretch Offset:**
   * Fixed stretch factor lookup (`STRETCH_OFFSETS[stretchKey]`) resolving JavaScript's `0`-falsy coercion bug.
@@ -124,7 +125,7 @@ Rendered via Three.js and `@react-three/fiber` inside a cinematic obsidian cyber
 
 ### 4. Interactive Volumetric 3D Atelier Workspace
 
-* **Uncalibrated Guest Protection:** Uncalibrated profiles display a clear `"Body Profile Not Yet Calibrated"` notification with quick-action buttons to enter measurements or test with the 42R demo archetype.
+* **Category-Specific Missing Dimension Alerts & Badges:** Profiles missing essential dimensions for the active garment display targeted prompts (*e.g., `"To recommend your jeans size accurately, please provide your hip, inseam and thigh measurements."`*) with per-dimension `Missing` badges, suppress false size recommendation indicators, and provide quick actions to calibrate or load the complete 8-dimension 42R Demo Archetype.
 * **Active Profile Status Banners:** Visual amber indicators for Demo Mode and emerald badges for verified customer profiles.
 * **Full-Width Top Header:** Title and descriptive subtitle span from left to right.
 * **4-Column Virtual Archive Recommendation Grid:** Clickable garment cards placed directly below the header with thumbnail images, match scores, prices, and unclipped text.
@@ -158,15 +159,15 @@ FitMatch AI/
 │   ├── requirements.txt         # FastAPI, Uvicorn, httpx, pydantic dependencies
 │   ├── .env.example             # Template for GNANI_API_KEY, GNANI_TOKEN, lang codes
 │   └── app/
-│       ├── main.py              # FastAPI application factory & CORS configuration
-│       ├── config.py            # Environment configuration & credential validation
+│       ├── main.py              # FastAPI app factory, CORS, & startup voice cache warm-up
+│       ├── config.py            # Vachana endpoints (`api.vachana.ai`), Vikrant voice & keys
 │       ├── routes/
-│       │   └── voice.py         # /api/voice/stt, /api/voice/tts, /api/voice/extract
+│       │   └── voice.py         # /api/voice/{stt,tts,extract,status,reset-keys}
 │       └── services/
-│           ├── gnani_stt.py     # Gnani Prisma STT proxy
-│           ├── gnani_tts.py     # Gnani Timbre TTS proxy & voice cloning
-│           ├── fallback_manager.py # Multi-key credit exhaustion listener
-│           └── measurement_extractor.py # Biometric numerical parser & bounds validator
+│           ├── gnani_stt.py     # Gnani Prisma v3 WAV transcription proxy
+│           ├── gnani_tts.py     # Gnani Timbre v2.5 synthesis + 48kHz RIFF WAV wrapper
+│           ├── gnani_fallback.py # Global asyncio API lock & key failover manager
+│           └── measurement_extractor.py # NLP numeric parser, smart inch conversion & bounds
 │
 └── src/
     ├── main.jsx                 # React root mount
