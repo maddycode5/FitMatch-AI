@@ -1,6 +1,102 @@
 import { CATEGORIES } from './types.js';
 
 /**
+ * Mapping between required human body dimension keys and corresponding garment size chart keys.
+ */
+export const BODY_TO_GARMENT_DIMENSIONS = {
+  chest_cm: ["garment_chest_cm", "chest_cm"],
+  shoulder_cm: ["shoulder_cm", "garment_shoulder_cm"],
+  neck_cm: ["neck_cm", "garment_neck_cm", "collar_cm"],
+  waist_cm: ["garment_waist_cm", "waist_cm"],
+  hip_cm: ["garment_hip_cm", "hip_cm"],
+  inseam_cm: ["inseam_cm", "inner_leg_cm"],
+  thigh_cm: ["thigh_cm", "garment_thigh_cm"],
+  arm_length_cm: ["sleeve_cm", "sleeve_length_cm", "arm_length_cm"],
+  sleeve_length_cm: ["sleeve_cm", "sleeve_length_cm", "arm_length_cm"]
+};
+
+export const DIMENSION_LABELS = {
+  chest_cm: "chest",
+  waist_cm: "waist",
+  hip_cm: "hip",
+  shoulder_cm: "shoulder",
+  neck_cm: "neck",
+  arm_length_cm: "arm length",
+  sleeve_length_cm: "sleeve length",
+  thigh_cm: "thigh",
+  inseam_cm: "inseam",
+  height_cm: "height"
+};
+
+/**
+ * Validates that all required body measurements exist, are finite numbers, and > 0.
+ * Handles arm_length_cm / sleeve_length_cm as compatible aliases.
+ */
+export function validateRequiredMeasurements(userMeasurements, requiredDimensions) {
+  const missing = (requiredDimensions || []).filter((dimension) => {
+    let value = userMeasurements?.[dimension];
+    if (dimension === 'arm_length_cm' || dimension === 'sleeve_length_cm') {
+      value = userMeasurements?.arm_length_cm ?? userMeasurements?.sleeve_length_cm;
+    }
+
+    if (value === null || value === undefined || value === '') {
+      return true;
+    }
+
+    const num = typeof value === 'number' ? value : parseFloat(value);
+    return !Number.isFinite(num) || num <= 0;
+  });
+
+  return {
+    isValid: missing.length === 0,
+    missing
+  };
+}
+
+/**
+ * Validates that the product's size chart contains corresponding physical garment specifications.
+ */
+export function validateGarmentDimensions(sizeChart, requiredBodyDimensions) {
+  if (!sizeChart || !Array.isArray(sizeChart) || sizeChart.length === 0) {
+    return {
+      isValid: false,
+      missing: ["size_chart"]
+    };
+  }
+
+  const missing = [];
+  for (const bodyDim of (requiredBodyDimensions || [])) {
+    const candidateKeys = BODY_TO_GARMENT_DIMENSIONS[bodyDim] || [bodyDim];
+    const hasData = sizeChart.some(sizeOption =>
+      candidateKeys.some(key => {
+        const val = sizeOption[key];
+        return typeof val === 'number' && Number.isFinite(val) && val > 0;
+      })
+    );
+    if (!hasData) {
+      missing.push(candidateKeys[0]);
+    }
+  }
+
+  return {
+    isValid: missing.length === 0,
+    missing
+  };
+}
+
+/**
+ * Formats a list of dimension keys into natural human language
+ * e.g. ["hip_cm", "inseam_cm", "thigh_cm"] -> "hip, inseam and thigh"
+ */
+export function formatMissingDimensionsText(missingKeys) {
+  const labels = missingKeys.map(k => DIMENSION_LABELS[k] || k.replace('_cm', '').replace('_', ' '));
+  if (labels.length === 0) return "";
+  if (labels.length === 1) return labels[0];
+  if (labels.length === 2) return `${labels[0]} and ${labels[1]}`;
+  return `${labels.slice(0, -1).join(', ')} and ${labels[labels.length - 1]}`;
+}
+
+/**
  * Deterministic, Category-Aware Fit Recommendation Engine
  * Compares customer body profile directly with a product's exact size chart.
  */
@@ -10,22 +106,77 @@ export function calculateProductFit({
   fitPreference = "regular"
 }) {
   const categoryConfig = CATEGORIES[product.category] || CATEGORIES.tshirt;
-  const userMeasurements = customerProfile.measurements || {};
-  const activeFitPref = fitPreference || customerProfile.fit_preferences?.default_fit || "regular";
+  const userMeasurements = customerProfile?.measurements || {};
+  const activeFitPref = fitPreference || customerProfile?.fit_preferences?.default_fit || "regular";
   const targetEaseConfig = categoryConfig.ease_targets[activeFitPref] || categoryConfig.ease_targets.regular;
   const weights = categoryConfig.dimension_weights;
   const criticalMins = categoryConfig.critical_minimum_ease || {};
 
-  // Check if primary dimension exists in user profile
-  const primaryDim = categoryConfig.primary_dimension;
-  if (!userMeasurements[primaryDim]) {
+  const catName = (categoryConfig.name || product.category || 'clothing').toLowerCase();
+
+  // 1. Category-specific validation: enforce that ALL required body dimensions exist and are positive numbers
+  const validation = validateRequiredMeasurements(
+    userMeasurements,
+    categoryConfig.required_body_dimensions
+  );
+
+  if (!validation.isValid) {
+    const formattedList = formatMissingDimensionsText(validation.missing);
+    const plural = validation.missing.length > 1 ? 's' : '';
+
     return {
       status: "insufficient_data",
+      missing_dimensions: validation.missing,
+      category_id: categoryConfig.id,
+      category_name: categoryConfig.name,
       recommended_size: null,
       fit_score: 0,
       confidence: "insufficient_data",
-      explanation: `Missing primary body dimension (${primaryDim.replace('_', ' ')}). Please provide this measurement to receive accurate sizing.`,
-      size_evaluations: []
+      message: `To recommend your ${catName} size accurately, please provide your ${formattedList} measurement${plural}.`,
+      explanation: `Your ${catName} recommendation requires ${formattedList} measurement${plural}. Complete your measurements to unlock your verified size.`,
+      size_evaluations: [],
+      all_sizes: [],
+      dimension_analysis: {},
+      tension_map: {}
+    };
+  }
+
+  // 2. Validate product size chart exists and has sizes
+  if (!product?.size_chart || !Array.isArray(product.size_chart) || product.size_chart.length === 0) {
+    return {
+      status: "insufficient_product_data",
+      recommended_size: null,
+      fit_score: 0,
+      confidence: "insufficient_data",
+      message: `Product size chart is unavailable or empty.`,
+      explanation: `Product size chart is unavailable or empty for ${product.product_name}.`,
+      size_evaluations: [],
+      all_sizes: [],
+      dimension_analysis: {},
+      tension_map: {}
+    };
+  }
+
+  // 3. Validate product size-chart garment dimensions corresponding to required body dimensions
+  const garmentValidation = validateGarmentDimensions(
+    product.size_chart,
+    categoryConfig.required_body_dimensions
+  );
+
+  if (!garmentValidation.isValid) {
+    const formattedGarment = garmentValidation.missing.map(d => d.replace('garment_', '').replace('_cm', '').replace('_', ' '));
+    return {
+      status: "insufficient_product_data",
+      missing_garment_dimensions: garmentValidation.missing,
+      recommended_size: null,
+      fit_score: 0,
+      confidence: "insufficient_data",
+      message: `Product size chart is missing required garment measurements (${formattedGarment.join(', ')}).`,
+      explanation: `Product size chart is missing required garment dimension specifications (${formattedGarment.join(', ')}).`,
+      size_evaluations: [],
+      all_sizes: [],
+      dimension_analysis: {},
+      tension_map: {}
     };
   }
 

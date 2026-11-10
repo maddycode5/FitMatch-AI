@@ -22,9 +22,9 @@ export const CATEGORIES = {
   tshirt: {
     id: "tshirt",
     name: "T-Shirt",
-    required_body_dimensions: ["chest_cm", "shoulder_cm"],
-    optional_body_dimensions: ["waist_cm", "height_cm"],
-    garment_dimensions: ["garment_chest_cm", "shoulder_cm", "garment_length_cm"],
+    required_body_dimensions: ["chest_cm", "waist_cm", "shoulder_cm"],
+    optional_body_dimensions: ["height_cm"],
+    garment_dimensions: ["garment_chest_cm", "garment_waist_cm", "shoulder_cm", "garment_length_cm"],
     primary_dimension: "chest_cm",
     primary_garment_key: "garment_chest_cm",
     ease_targets: {
@@ -33,12 +33,13 @@ export const CATEGORIES = {
       oversized: { chest: 16.0, waist: 18.0, shoulder: 3.5, length: 4.0 }
     },
     dimension_weights: {
-      chest: 0.50,
-      shoulder: 0.35,
-      length: 0.15
+      chest: 0.45,
+      waist: 0.25,
+      shoulder: 0.30
     },
     critical_minimum_ease: {
       chest: 1.0, // A t-shirt must have at least 1cm ease to be wearable
+      waist: 1.0,
       shoulder: -1.0,
       length: -4.0
     }
@@ -46,9 +47,9 @@ export const CATEGORIES = {
   shirt: {
     id: "shirt",
     name: "Tailored Shirt",
-    required_body_dimensions: ["chest_cm", "neck_cm", "shoulder_cm"],
-    optional_body_dimensions: ["waist_cm", "arm_length_cm"],
-    garment_dimensions: ["garment_chest_cm", "neck_cm", "shoulder_cm", "sleeve_cm", "garment_length_cm"],
+    required_body_dimensions: ["chest_cm", "waist_cm", "shoulder_cm", "neck_cm", "arm_length_cm"],
+    optional_body_dimensions: ["height_cm"],
+    garment_dimensions: ["garment_chest_cm", "garment_waist_cm", "neck_cm", "shoulder_cm", "sleeve_cm", "garment_length_cm"],
     primary_dimension: "chest_cm",
     primary_garment_key: "garment_chest_cm",
     ease_targets: {
@@ -57,13 +58,15 @@ export const CATEGORIES = {
       oversized: { chest: 18.0, waist: 18.0, neck: 3.5, shoulder: 4.0, sleeve: 4.5 }
     },
     dimension_weights: {
-      chest: 0.40,
-      shoulder: 0.30,
-      neck: 0.15,
-      sleeve: 0.15
+      chest: 0.35,
+      waist: 0.25,
+      shoulder: 0.20,
+      neck: 0.10,
+      sleeve: 0.10
     },
     critical_minimum_ease: {
       chest: 2.0,
+      waist: 2.0,
       neck: 1.0,
       shoulder: 0.0,
       sleeve: -0.5
@@ -72,8 +75,8 @@ export const CATEGORIES = {
   jacket: {
     id: "jacket",
     name: "Jacket & Trench",
-    required_body_dimensions: ["chest_cm", "shoulder_cm"],
-    optional_body_dimensions: ["waist_cm", "arm_length_cm", "height_cm"],
+    required_body_dimensions: ["chest_cm", "shoulder_cm", "arm_length_cm"],
+    optional_body_dimensions: ["waist_cm", "height_cm"],
     garment_dimensions: ["garment_chest_cm", "shoulder_cm", "sleeve_cm", "garment_length_cm"],
     primary_dimension: "chest_cm",
     primary_garment_key: "garment_chest_cm",
@@ -95,9 +98,9 @@ export const CATEGORIES = {
   },
   jeans: {
     id: "jeans",
-    name: "Jeans & Trousers",
-    required_body_dimensions: ["waist_cm", "hip_cm", "inseam_cm"],
-    optional_body_dimensions: ["thigh_cm"],
+    name: "Jeans",
+    required_body_dimensions: ["waist_cm", "hip_cm", "inseam_cm", "thigh_cm"],
+    optional_body_dimensions: ["height_cm"],
     garment_dimensions: ["garment_waist_cm", "garment_hip_cm", "inseam_cm", "thigh_cm"],
     primary_dimension: "waist_cm",
     primary_garment_key: "garment_waist_cm",
@@ -107,15 +110,41 @@ export const CATEGORIES = {
       oversized: { waist: 6.0, hip: 12.0, thigh: 8.0, inseam: 2.0 }
     },
     dimension_weights: {
-      waist: 0.45,
+      waist: 0.40,
       hip: 0.30,
-      thigh: 0.15,
+      thigh: 0.20,
       inseam: 0.10
     },
     critical_minimum_ease: {
       waist: -1.0, // Stretchy denim can allow slightly negative ease, but rigid requires >= 0
       hip: 1.0,
       thigh: 0.5,
+      inseam: -2.0
+    }
+  },
+  trousers: {
+    id: "trousers",
+    name: "Trousers",
+    required_body_dimensions: ["waist_cm", "hip_cm", "inseam_cm", "thigh_cm"],
+    optional_body_dimensions: ["height_cm"],
+    garment_dimensions: ["garment_waist_cm", "garment_hip_cm", "inseam_cm", "thigh_cm"],
+    primary_dimension: "waist_cm",
+    primary_garment_key: "garment_waist_cm",
+    ease_targets: {
+      slim: { waist: 1.5, hip: 3.5, thigh: 2.5, inseam: 0.0 },
+      regular: { waist: 3.5, hip: 6.5, thigh: 5.0, inseam: 1.0 },
+      oversized: { waist: 7.0, hip: 12.0, thigh: 8.0, inseam: 2.0 }
+    },
+    dimension_weights: {
+      waist: 0.40,
+      hip: 0.30,
+      thigh: 0.20,
+      inseam: 0.10
+    },
+    critical_minimum_ease: {
+      waist: 0.0,
+      hip: 1.5,
+      thigh: 1.0,
       inseam: -2.0
     }
   },
@@ -138,9 +167,9 @@ export const CATEGORIES = {
       hip: 0.30
     },
     critical_minimum_ease: {
-      chest: 0.0,
-      waist: 0.0,
-      hip: 1.0
+      chest: 1.0,
+      waist: 0.5,
+      hip: 2.0
     }
   }
 };
@@ -213,6 +242,11 @@ export const DEMO_USER_PROFILE = {
       waist_cm: 1.0,
       hip_cm: 1.0,
       shoulder_cm: 1.0,
+      neck_cm: 1.0,
+      arm_length_cm: 1.0,
+      sleeve_length_cm: 1.0,
+      inseam_cm: 1.0,
+      thigh_cm: 1.0,
       height_cm: 1.0
     },
     verified_by_user: false,

@@ -49,10 +49,10 @@ export const LUXURY_PRODUCTS = [
     ],
     default_colorway: "white",
     size_chart: [
-      { size: "38 (S)", garment_chest_cm: 102, neck_cm: 39.0, shoulder_cm: 44.0, sleeve_cm: 63, garment_length_cm: 75 },
-      { size: "40 (M)", garment_chest_cm: 108, neck_cm: 40.5, shoulder_cm: 45.5, sleeve_cm: 64, garment_length_cm: 77 },
-      { size: "42 (L)", garment_chest_cm: 114, neck_cm: 42.0, shoulder_cm: 47.0, sleeve_cm: 66, garment_length_cm: 79 },
-      { size: "44 (XL)", garment_chest_cm: 120, neck_cm: 43.5, shoulder_cm: 49.0, sleeve_cm: 67, garment_length_cm: 80 }
+      { size: "38 (S)", garment_chest_cm: 102, garment_waist_cm: 94, neck_cm: 39.0, shoulder_cm: 44.0, sleeve_cm: 63, garment_length_cm: 75 },
+      { size: "40 (M)", garment_chest_cm: 108, garment_waist_cm: 100, neck_cm: 40.5, shoulder_cm: 45.5, sleeve_cm: 64, garment_length_cm: 77 },
+      { size: "42 (L)", garment_chest_cm: 114, garment_waist_cm: 106, neck_cm: 42.0, shoulder_cm: 47.0, sleeve_cm: 66, garment_length_cm: 79 },
+      { size: "44 (XL)", garment_chest_cm: 120, garment_waist_cm: 112, neck_cm: 43.5, shoulder_cm: 49.0, sleeve_cm: 67, garment_length_cm: 80 }
     ]
   },
   {
