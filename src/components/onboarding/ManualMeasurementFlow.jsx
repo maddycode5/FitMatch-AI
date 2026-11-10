@@ -17,6 +17,7 @@ export default function ManualMeasurementFlow({ initialProfile, onSave, onBack }
   const [unit, setUnit] = useState(initialProfile?.unit || 'cm');
   const [step, setStep] = useState(1); // 1 = Entry, 2 = Review & Confirm
   const [activeTip, setActiveTip] = useState('chest_cm');
+  const [isDemoData, setIsDemoData] = useState(Boolean(initialProfile?.is_demo));
 
   // Working state in cm - first-time visitors start empty, with example values shown as placeholders
   const [formData, setFormData] = useState({
@@ -54,10 +55,12 @@ export default function ManualMeasurementFlow({ initialProfile, onSave, onBack }
       inseam_cm: 80,
       thigh_cm: 56
     });
+    setIsDemoData(true);
     setErrors({});
   };
 
   const handleInputChange = (key, val) => {
+    setIsDemoData(false); // Customer entered their own value, no longer pure demo data
     if (val === '') {
       setFormData(prev => ({ ...prev, [key]: '' }));
       setErrors(prev => {
@@ -117,29 +120,32 @@ export default function ManualMeasurementFlow({ initialProfile, onSave, onBack }
 
   const handleFinalSubmit = () => {
     onSave({
-      height_cm: formData.height_cm,
-      weight_kg: formData.weight_kg,
+      is_demo: isDemoData,
+      profile_label: isDemoData ? "Demo Archetype (Size 42R / L)" : "Verified Customer Profile",
+      height_cm: formData.height_cm ? parseFloat(formData.height_cm) : null,
+      weight_kg: formData.weight_kg ? parseFloat(formData.weight_kg) : null,
       unit,
       measurements: {
-        chest_cm: formData.chest_cm,
-        waist_cm: formData.waist_cm,
-        hip_cm: formData.hip_cm,
-        shoulder_cm: formData.shoulder_cm,
-        neck_cm: formData.neck_cm,
-        arm_length_cm: formData.arm_length_cm,
-        sleeve_length_cm: formData.arm_length_cm,
-        inseam_cm: formData.inseam_cm,
-        thigh_cm: formData.thigh_cm
+        chest_cm: formData.chest_cm ? parseFloat(formData.chest_cm) : null,
+        waist_cm: formData.waist_cm ? parseFloat(formData.waist_cm) : null,
+        hip_cm: formData.hip_cm ? parseFloat(formData.hip_cm) : null,
+        shoulder_cm: formData.shoulder_cm ? parseFloat(formData.shoulder_cm) : null,
+        neck_cm: formData.neck_cm ? parseFloat(formData.neck_cm) : null,
+        arm_length_cm: formData.arm_length_cm ? parseFloat(formData.arm_length_cm) : null,
+        sleeve_length_cm: formData.arm_length_cm ? parseFloat(formData.arm_length_cm) : null,
+        inseam_cm: formData.inseam_cm ? parseFloat(formData.inseam_cm) : null,
+        thigh_cm: formData.thigh_cm ? parseFloat(formData.thigh_cm) : null
       },
       measurement_metadata: {
-        source: "manual",
+        source: isDemoData ? "demo_archetype" : "manual",
         confidence: {
           chest_cm: 1.0,
           waist_cm: 1.0,
           hip_cm: 1.0,
           shoulder_cm: 1.0
         },
-        verified_by_user: true,
+        verified_by_user: !isDemoData,
+        is_demo: isDemoData,
         updated_at: new Date().toISOString()
       }
     });
@@ -382,8 +388,33 @@ export default function ManualMeasurementFlow({ initialProfile, onSave, onBack }
       ) : (
         /* Step 2: Verification Screen */
         <div className="space-y-6">
+          {/* Distinct Demo Data vs Verified Customer Profile Banner */}
+          {isDemoData ? (
+            <div className="p-4 rounded-2xl bg-amber-950/40 border border-amber-500/40 flex items-start justify-between gap-3 text-xs text-amber-200">
+              <div className="space-y-0.5">
+                <span className="flex items-center gap-2 font-mono text-[11px] font-semibold text-amber-300">
+                  <span className="w-2 h-2 rounded-full bg-amber-400" />
+                  <span>Demo Profile Active (Size 42R Archetype)</span>
+                </span>
+                <p className="text-[11px] text-amber-300/80 font-light">
+                  This profile uses standardized sample measurements for testing. It will be saved as unverified sample data.
+                </p>
+              </div>
+              <span className="text-[10px] uppercase font-mono tracking-wider px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 shrink-0">
+                Demo
+              </span>
+            </div>
+          ) : (
+            <div className="p-4 rounded-2xl bg-emerald-950/40 border border-emerald-500/40 flex items-center gap-2.5 text-xs text-emerald-200 font-mono text-[11px]">
+              <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>Verified Customer Profile: Measurements entered manually by customer</span>
+            </div>
+          )}
+
           <div className="p-5 rounded-2xl glass-panel border border-white/10">
-            <h4 className="text-sm font-medium text-white mb-3">Confirm Your Universal Profile Dimensions</h4>
+            <h4 className="text-sm font-medium text-white mb-3">
+              {isDemoData ? 'Demo 42R Dimensions' : 'Confirm Your Personal Tape Dimensions'}
+            </h4>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs font-mono">
               <div className="p-3 bg-neutral-900/60 rounded-xl">
                 <span className="text-neutral-500 block">Height</span>
@@ -432,10 +463,14 @@ export default function ManualMeasurementFlow({ initialProfile, onSave, onBack }
             <button
               type="button"
               onClick={handleFinalSubmit}
-              className="bg-white text-black hover:bg-neutral-200 px-7 py-3 rounded-full text-xs uppercase tracking-widest font-semibold flex items-center gap-2 transition-colors shadow-2xl"
+              className={`px-7 py-3 rounded-full text-xs uppercase tracking-widest font-semibold flex items-center gap-2 transition-colors shadow-2xl ${
+                isDemoData
+                  ? 'bg-amber-400 text-black hover:bg-amber-300'
+                  : 'bg-white text-black hover:bg-neutral-200'
+              }`}
             >
               <Check className="w-4 h-4" />
-              <span>Save Universal Profile</span>
+              <span>{isDemoData ? 'Save as Demo Profile (Unverified)' : 'Confirm & Save Verified Profile'}</span>
             </button>
           </div>
         </div>

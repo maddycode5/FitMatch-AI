@@ -12,15 +12,36 @@ export default function PhotoUploadFlow({ onSave, onBack }) {
   const [step, setStep] = useState(1); // 1 = Upload, 2 = Verify Estimates
   const [activeSpeakingKey, setActiveSpeakingKey] = useState(null);
 
-  // User-verified measurements with photo reference
+  // User-verified measurements with photo reference (starts empty)
   const [estimates, setEstimates] = useState({
-    height_cm: 178,
-    chest_cm: 98,
-    waist_cm: 82,
-    hip_cm: 96,
-    shoulder_cm: 45,
-    inseam_cm: 80
+    height_cm: '',
+    chest_cm: '',
+    waist_cm: '',
+    hip_cm: '',
+    shoulder_cm: '',
+    inseam_cm: ''
   });
+  const [isDemoData, setIsDemoData] = useState(false);
+  const [validationError, setValidationError] = useState('');
+
+  const handleFillDemoValues = () => {
+    setEstimates({
+      height_cm: 178,
+      chest_cm: 98,
+      waist_cm: 82,
+      hip_cm: 96,
+      shoulder_cm: 45,
+      inseam_cm: 80
+    });
+    setIsDemoData(true);
+    setValidationError('');
+  };
+
+  const handleInputChange = (key, val) => {
+    setIsDemoData(false);
+    setValidationError('');
+    setEstimates(prev => ({ ...prev, [key]: val }));
+  };
 
   const handleFileChange = (e, type) => {
     setErrorMsg(null);
@@ -71,27 +92,41 @@ export default function PhotoUploadFlow({ onSave, onBack }) {
   };
 
   const handleFinalSave = () => {
+    const chest = parseFloat(estimates.chest_cm);
+    const waist = parseFloat(estimates.waist_cm);
+    const shoulder = parseFloat(estimates.shoulder_cm);
+
+    if (!chest || !waist || !shoulder || isNaN(chest) || isNaN(waist) || isNaN(shoulder)) {
+      setValidationError("Please enter your physical tape measurements (or load sample demo values) before saving.");
+      return;
+    }
+
     timbreTTS.stop();
     onSave({
-      height_cm: estimates.height_cm,
-      weight_kg: 72,
+      is_demo: isDemoData,
+      profile_label: isDemoData ? "Demo Archetype (Size 42R / L)" : "Verified Customer Profile",
+      height_cm: estimates.height_cm ? parseFloat(estimates.height_cm) : (isDemoData ? 178 : null),
+      weight_kg: isDemoData ? 72 : null,
       unit: "cm",
       measurements: {
-        chest_cm: estimates.chest_cm,
-        waist_cm: estimates.waist_cm,
-        hip_cm: estimates.hip_cm,
-        shoulder_cm: estimates.shoulder_cm,
-        neck_cm: 39,
-        arm_length_cm: 62,
-        sleeve_length_cm: 63,
-        inseam_cm: estimates.inseam_cm,
-        thigh_cm: 56
+        chest_cm: chest,
+        waist_cm: waist,
+        hip_cm: estimates.hip_cm ? parseFloat(estimates.hip_cm) : (isDemoData ? 96 : null),
+        shoulder_cm: shoulder,
+        neck_cm: isDemoData ? 39 : null,
+        arm_length_cm: isDemoData ? 62 : null,
+        sleeve_length_cm: isDemoData ? 63 : null,
+        inseam_cm: estimates.inseam_cm ? parseFloat(estimates.inseam_cm) : (isDemoData ? 80 : null),
+        thigh_cm: isDemoData ? 56 : null
       },
       measurement_metadata: {
-        source: "photo_guided_reference",
-        verified_by_user: true,
+        source: isDemoData ? "demo_archetype" : "photo_guided_reference",
+        verified_by_user: !isDemoData,
+        is_demo: isDemoData,
         prototype_mode: "experimental_photo_reference",
-        disclaimer: "User-verified manual measurement with photo proportion reference",
+        disclaimer: isDemoData
+          ? "Standardized sample measurements loaded for demonstration (unverified)"
+          : "User-verified manual measurement with photo proportion reference",
         updated_at: new Date().toISOString()
       }
     });
@@ -230,27 +265,60 @@ export default function PhotoUploadFlow({ onSave, onBack }) {
             </div>
           </div>
 
+          {/* Demo Data Banner when Demo is active */}
+          {isDemoData && (
+            <div className="p-3.5 rounded-2xl bg-amber-950/40 border border-amber-500/40 flex items-center justify-between text-xs text-amber-200">
+              <span className="flex items-center gap-2 font-mono text-[11px]">
+                <span className="w-2 h-2 rounded-full bg-amber-400" />
+                <span>Demo Archetype Values Loaded (Size 42R) • Will be saved as unverified sample data</span>
+              </span>
+              <span className="text-[10px] uppercase font-mono tracking-wider px-2 py-0.5 rounded bg-amber-500/20 text-amber-300">
+                Demo
+              </span>
+            </div>
+          )}
+
+          {/* Validation Warning */}
+          {validationError && (
+            <div className="p-3 rounded-xl bg-rose-950/60 border border-rose-500/30 text-xs text-rose-300 flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+              <span>{validationError}</span>
+            </div>
+          )}
+
           {/* Dimension Adjustment List with Gnani Voice Guidance */}
           <div className="space-y-3">
-            <div className="flex items-center justify-between border-b border-white/10 pb-2">
-              <h4 className="text-xs font-mono uppercase tracking-widest text-neutral-300">
-                User-Verified Tape Dimensions
-              </h4>
-              <span className="text-[10px] font-mono text-cyan-400">
-                Tap 🔊 to hear tailor instructions
-              </span>
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-2">
+              <div>
+                <h4 className="text-xs font-mono uppercase tracking-widest text-neutral-300">
+                  User-Verified Tape Dimensions
+                </h4>
+                <p className="text-[11px] text-neutral-400">
+                  Fields start empty. Please measure with a physical tape or load demo values.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleFillDemoValues}
+                  className="px-3 py-1 rounded-full text-[10px] font-mono bg-cyan-950/80 text-cyan-300 border border-cyan-400/30 hover:border-cyan-400 transition-all flex items-center gap-1"
+                >
+                  <span>⚡ Load Demo Values (42R)</span>
+                </button>
+              </div>
             </div>
 
             {[
-              { key: 'chest_cm', label: 'Chest / Bust Circumference', min: 75, max: 135 },
-              { key: 'shoulder_cm', label: 'Shoulder Width', min: 36, max: 56 },
-              { key: 'waist_cm', label: 'Waist Circumference', min: 60, max: 120 },
-              { key: 'hip_cm', label: 'Hip Circumference', min: 75, max: 130 },
-              { key: 'inseam_cm', label: 'Inseam Length', min: 65, max: 95 }
+              { key: 'chest_cm', label: 'Chest / Bust Circumference', placeholder: '98', required: true },
+              { key: 'shoulder_cm', label: 'Shoulder Width', placeholder: '45', required: true },
+              { key: 'waist_cm', label: 'Waist Circumference', placeholder: '82', required: true },
+              { key: 'hip_cm', label: 'Hip Circumference', placeholder: '96', required: false },
+              { key: 'inseam_cm', label: 'Inseam Length', placeholder: '80', required: false }
             ].map(item => (
-              <div key={item.key} className="p-3 rounded-xl bg-neutral-900/70 border border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
+              <div key={item.key} className="p-3.5 rounded-xl bg-neutral-900/70 border border-white/10 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
                   <button
+                    type="button"
                     onClick={() => speakGuidance(item.key)}
                     className={`p-1.5 rounded-full border transition-all ${
                       activeSpeakingKey === item.key
@@ -262,24 +330,23 @@ export default function PhotoUploadFlow({ onSave, onBack }) {
                     <Volume2 className="w-3.5 h-3.5" />
                   </button>
                   <div>
-                    <span className="text-xs text-white font-medium block">{item.label}</span>
-                    <span className="text-[10px] font-mono text-neutral-400">Tape measurement (cm)</span>
+                    <span className="text-xs text-white font-medium block">
+                      {item.label} {item.required && <span className="text-cyan-400">*</span>}
+                    </span>
+                    <span className="text-[10px] font-mono text-neutral-400">Physical tape measurement</span>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3 w-full sm:w-auto">
+                <div className="flex items-center gap-2">
                   <input
-                    type="range"
-                    min={item.min}
-                    max={item.max}
+                    type="number"
+                    step="0.5"
+                    placeholder={`e.g. ${item.placeholder}`}
                     value={estimates[item.key]}
-                    onChange={(e) => setEstimates(prev => ({ ...prev, [item.key]: parseFloat(e.target.value) }))}
-                    className="w-full sm:w-44 accent-white cursor-pointer"
+                    onChange={(e) => handleInputChange(item.key, e.target.value)}
+                    className="w-28 px-3 py-1.5 rounded-xl bg-black/80 border border-white/20 text-white font-mono text-sm focus:border-cyan-400 focus:outline-none text-right placeholder:text-neutral-600"
                   />
-                  <div className="flex items-center gap-1 font-mono text-sm text-right text-white font-semibold min-w-[70px] justify-end">
-                    <span>{estimates[item.key]}</span>
-                    <span className="text-[10px] font-normal text-neutral-400">cm</span>
-                  </div>
+                  <span className="font-mono text-xs text-neutral-400 w-6">cm</span>
                 </div>
               </div>
             ))}
@@ -291,10 +358,14 @@ export default function PhotoUploadFlow({ onSave, onBack }) {
             </button>
             <button
               onClick={handleFinalSave}
-              className="bg-white text-black hover:bg-neutral-200 px-7 py-3 rounded-full text-xs uppercase tracking-widest font-semibold flex items-center gap-2 transition-colors shadow-2xl"
+              className={`px-7 py-3 rounded-full text-xs uppercase tracking-widest font-semibold flex items-center gap-2 transition-colors shadow-2xl ${
+                isDemoData
+                  ? 'bg-amber-400 text-black hover:bg-amber-300'
+                  : 'bg-white text-black hover:bg-neutral-200'
+              }`}
             >
-              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-              <span>Confirm & Save Verified Profile</span>
+              <CheckCircle2 className="w-4 h-4" />
+              <span>{isDemoData ? 'Save as Demo Profile (Unverified)' : 'Confirm & Save Verified Profile'}</span>
             </button>
           </div>
         </div>

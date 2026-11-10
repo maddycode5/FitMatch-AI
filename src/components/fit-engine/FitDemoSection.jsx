@@ -77,7 +77,7 @@ export default function FitDemoSection({
     });
   }, [customerProfile, activeProduct]);
 
-  const isCalibrated = Boolean(customerProfile?.measurements?.chest_cm);
+  const isCalibrated = fitResult.status === "success" && Boolean(fitResult.recommended_size);
   const recommendedSize = fitResult.recommended_size || (isCalibrated ? activeProduct.size_chart[0].size : '—');
   const avatarId = customerProfile?.profile_id || (isCalibrated ? 'AVATAR-#FIT-9021' : 'GUEST-UNCALIBRATED');
   const chestVal = customerProfile?.measurements?.chest_cm;
@@ -283,10 +283,12 @@ export default function FitDemoSection({
                   <span>Synthesized Volumetric Verdict</span>
                 </div>
                 <div className="font-serif text-2xl font-bold tracking-tight text-neutral-900 mt-0.5">
-                  Size {recommendedSize} • {activeFabric.verdict}
+                  {isCalibrated ? `Size ${recommendedSize} • ${activeFabric.verdict}` : (fitResult.missing_dimensions ? `Pending Required Measurements` : `Calibration Required`)}
                 </div>
                 <div className="text-xs text-neutral-600 font-sans mt-0.5">
-                  Calibrated for {activeFabric.name} ({activeFabric.weight}) with +10.6cm optimal chest ease.
+                  {isCalibrated 
+                    ? `Calibrated for ${activeFabric.name} (${activeFabric.weight}) with +10.6cm optimal ease.`
+                    : (fitResult.message || `Please complete your category-specific measurements to unlock recommended size.`)}
                 </div>
               </div>
               

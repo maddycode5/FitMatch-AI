@@ -11,7 +11,8 @@ import {
   ShieldCheck,
   CheckCircle2,
   ArrowRight,
-  Palette
+  Palette,
+  Sparkles
 } from 'lucide-react';
 
 export default function ProductStudio3D({
@@ -60,6 +61,7 @@ export default function ProductStudio3D({
     });
   }, [customerProfile, activeProduct, fitPref]);
 
+  const isCategoryCalibrated = fitResult.status === "success" && Boolean(fitResult.recommended_size);
   const recommendedSize = fitResult.recommended_size || activeProduct.size_chart[0].size;
   const activeSize = userSelectedSize || recommendedSize;
 
@@ -297,35 +299,55 @@ export default function ProductStudio3D({
                 {/* Score Pill (Updates with selected size) */}
                 <div className="text-right">
                   <div className="font-serif text-3xl sm:text-4xl font-semibold text-white">
-                    {Boolean(customerProfile?.measurements?.chest_cm) ? `${activeEvaluation.fit_score ?? fitResult.fit_score}%` : '—%'}
+                    {isCategoryCalibrated ? `${activeEvaluation.fit_score ?? fitResult.fit_score}%` : '—%'}
                   </div>
                   <span className={`text-[10px] font-mono uppercase tracking-wider font-semibold ${
-                    Boolean(customerProfile?.measurements?.chest_cm) ? 'text-emerald-400' : 'text-neutral-500'
+                    isCategoryCalibrated ? 'text-emerald-400' : 'text-neutral-500'
                   }`}>
-                    {Boolean(customerProfile?.measurements?.chest_cm) ? `${fitResult.confidence} Confidence` : 'Uncalibrated'}
+                    {isCategoryCalibrated ? `${fitResult.confidence} Confidence` : 'Uncalibrated'}
                   </span>
                 </div>
               </div>
 
               {/* Uncalibrated Guest Alert Box vs Verified / Demo Recommendation */}
-              {!Boolean(customerProfile?.measurements?.chest_cm) ? (
+              {!isCategoryCalibrated ? (
                 <div className="p-5 rounded-2xl bg-cyan-950/40 border border-cyan-400/40 space-y-3">
                   <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
+                    <span className={`w-2 h-2 rounded-full ${fitResult.missing_dimensions ? 'bg-amber-400 animate-ping' : 'bg-cyan-400 animate-ping'}`} />
                     <span className="text-xs font-mono uppercase tracking-wider text-cyan-300 font-semibold">
-                      Body Profile Not Yet Calibrated
+                      {fitResult.missing_dimensions ? `Complete Your Measurements for ${activeProduct.product_name}` : 'Body Profile Not Yet Calibrated'}
                     </span>
                   </div>
                   <p className="text-xs text-neutral-300 leading-relaxed font-light">
-                    FitMatch AI computes deterministic ease clearances from your actual physical tape measurements. Provide your measurements using Voice or Manual entry to unlock your verified size.
+                    {fitResult.message || fitResult.explanation || "FitMatch AI computes deterministic ease clearances from your actual physical tape measurements. Provide your measurements using Voice or Manual entry to unlock your verified size."}
                   </p>
+
+                  {/* Missing Dimension Badges */}
+                  {fitResult.missing_dimensions && fitResult.missing_dimensions.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 pt-0.5">
+                      {fitResult.missing_dimensions.map((dim) => {
+                        const label = dim.replace('_cm', '').replace('_', ' ');
+                        return (
+                          <span 
+                            key={dim}
+                            className="text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-rose-950/70 text-rose-300 border border-rose-500/40 flex items-center gap-1.5"
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
+                            <span className="capitalize">{label}</span>
+                            <span className="text-rose-400/70">• Missing</span>
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
+
                   <div className="flex flex-wrap gap-2 pt-1">
                     <button
                       onClick={onOpenFitFinder}
                       className="bg-white text-black hover:bg-neutral-200 px-4 py-2 rounded-full text-xs uppercase tracking-wider font-semibold flex items-center gap-1.5 transition-all shadow-md"
                     >
                       <SlidersHorizontal className="w-3.5 h-3.5" />
-                      <span>Calibrate Measurements</span>
+                      <span>{fitResult.missing_dimensions ? 'Complete Required Measurements' : 'Calibrate Measurements'}</span>
                     </button>
                     {onLoadDemoProfile && (
                       <button
@@ -408,14 +430,14 @@ export default function ProductStudio3D({
                   <label className="text-[11px] font-mono uppercase tracking-widest text-neutral-400">
                     Try Any Size On 3D Model:
                   </label>
-                  <span className="text-[10px] font-mono text-cyan-400">
-                    Recommended: Size {recommendedSize}
+                  <span className={`text-[10px] font-mono ${isCategoryCalibrated ? 'text-cyan-400' : 'text-neutral-500'}`}>
+                    Recommended: {isCategoryCalibrated ? `Size ${recommendedSize}` : 'Pending Complete Measurements'}
                   </span>
                 </div>
                 <div className="grid grid-cols-4 gap-2.5">
                   {activeProduct.size_chart.map((chartItem) => {
                     const isSelected = activeSize === chartItem.size;
-                    const isRecommended = recommendedSize === chartItem.size;
+                    const isRecommended = isCategoryCalibrated && fitResult.recommended_size === chartItem.size;
                     return (
                       <button
                         key={chartItem.size}
