@@ -7,6 +7,7 @@
 **Precision apparel fit, deterministic ease calculations, category-aware dimension scoring, and real-time 3D holographic wardrobe try-on.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-black.svg?style=flat-square)](#)
+[![Netlify Deploy](https://img.shields.io/badge/Netlify-Live_Demo-00C7B7?style=flat-square&logo=netlify)](https://relaxed-concha-1a5f78.netlify.app/)
 [![React 18](https://img.shields.io/badge/React-18.3-00f0ff?style=flat-square&logo=react)](#)
 [![Three.js](https://img.shields.io/badge/Three.js-r164-black?style=flat-square&logo=three.js)](#)
 [![React Three Fiber](https://img.shields.io/badge/@react--three/fiber-v8-blue?style=flat-square)](#)
@@ -28,6 +29,8 @@ $$\text{Garment Ease} = \text{Physical Garment Dimension} - \text{Customer Body 
 
 The platform couples a **deterministic category-aware sizing algorithm** with a **real-time 3D biometric holographic customizer** that drapes photorealistic garments from **The Virtual Archive** directly over your custom anatomical morphology.
 
+> 🌐 **Live Public Web Application (Netlify):** [https://relaxed-concha-1a5f78.netlify.app/](https://relaxed-concha-1a5f78.netlify.app/)
+> 
 > 📄 **1-Page Executive Summary & Architecture Proof:** See [`solution.md`](solution.md).
 
 ---
@@ -279,6 +282,11 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 npm run build
 ```
 The production bundle generates in `dist/`. Client scripts are completely free of private API keys.
+
+### 4. Live Public Deployment (Netlify)
+The frontend web application is hosted and publicly accessible at:
+* **Production URL:** [https://relaxed-concha-1a5f78.netlify.app/](https://relaxed-concha-1a5f78.netlify.app/)
+* **Zero Client Secrets:** Production builds bundle exclusively client WebGL & Web Audio assets; voice and measurement proxies connect cleanly to the backend API without baking credentials into client bundles.
 
 ---
 

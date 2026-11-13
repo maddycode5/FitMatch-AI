@@ -1,6 +1,7 @@
 # FitMatch AI — 1-Page Solution Brief
 
->**Universal 8-Dimension Body Profiling, Hands-Free Gnani Voice-Guided Measurement & 3D Fit Intelligence Engine**
+>**Universal 8-Dimension Body Profiling, Hands-Free Gnani Voice-Guided Measurement & 3D Fit Intelligence Engine**  
+>🌐 **Live Web Application:** [https://relaxed-concha-1a5f78.netlify.app/](https://relaxed-concha-1a5f78.netlify.app/) &nbsp;|&nbsp; 💻 **Repository:** [github.com/maddycode5/FitMatch-AI](https://github.com/maddycode5/FitMatch-AI)
 
 ## 1. Project Overview
 **FitMatch AI** eliminates apparel sizing guesswork by pairing an **8-dimension biometric body profile** (Upper Body: *Chest, Shoulder, Neck, Arm Length*; Lower Body: *Waist, Hip, Thigh, Inseam*) with a **category-specific deterministic fit engine** and a **real-time Three.js 3D studio**. Customers calibrate hands-free using conversational voice guidance (**Gnani Prisma STT** + **Gnani Timbre TTS** via a zero-secret FastAPI proxy) or manual entry, inspect 3D garment drape and tension heatmaps, and view exact garment-ease scores ($\text{Ease} = \text{Garment Spec} - \text{Body Spec}$).
